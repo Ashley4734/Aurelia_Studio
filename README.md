@@ -51,10 +51,15 @@ Professional digital art workflow platform for mockups, packaging, generation, a
 - Node.js 18+
 - Python 3+
 - Docker (optional)
+- For production: Coolify instance (recommended)
 
 ### Environment Variables
 
-Create a `.env` file in the root directory:
+The application requires environment variables for API integrations. See [.env.example](.env.example) for the complete list.
+
+**For Coolify deployments:** Add environment variables through the Coolify dashboard (see [COOLIFY.md](COOLIFY.md) for detailed instructions).
+
+**For local development:** Create a `.env` file in the root directory:
 
 ```env
 # Required for AI generation
@@ -71,7 +76,56 @@ NODE_ENV=production
 
 ### Installation
 
-#### Using Docker (Recommended)
+#### Using Coolify (Recommended for Production)
+
+**→ See [COOLIFY.md](COOLIFY.md) for complete step-by-step deployment guide.**
+
+Coolify provides the easiest deployment experience with automatic SSL, persistent storage, and environment variable management.
+
+**Quick Start:**
+
+1. **Connect Repository**
+   - In Coolify dashboard, create a new Application
+   - Connect this GitHub repository
+   - Select the branch you want to deploy
+
+2. **Configure Environment Variables**
+
+   Navigate to Application > Environment Variables and add:
+
+   **Required:**
+   - `REPLICATE_API_TOKEN` - Your Replicate API token from https://replicate.com/account/api-tokens
+
+   **Optional:**
+   - `ANTHROPIC_API_KEY` - Your Anthropic API key from https://console.anthropic.com/
+   - `PORT` - Custom port (default: 3000)
+   - `NODE_ENV` - Set to `production`
+   - `DATA_DIR` - Custom data directory (default: /data)
+
+3. **Configure Persistent Storage**
+
+   In Application > Storages, add a persistent volume:
+   - **Source:** Create a new volume (e.g., `aurelia-data`)
+   - **Destination:** `/data`
+   - This ensures your mockup library and uploads persist across deployments
+
+4. **Configure Health Check** (Optional but Recommended)
+
+   In Application > Health Check:
+   - **Path:** `/api/health`
+   - **Port:** `3000` (or your custom PORT)
+   - **Interval:** 30s
+
+5. **Deploy**
+   - Click "Deploy" and Coolify will build and start your application
+   - Access your app at the provided URL
+
+**Notes:**
+- Coolify automatically handles SSL certificates
+- No need to manually create `.env` files - all configuration is via the dashboard
+- The health check endpoint returns application status and feature availability
+
+#### Using Docker (Alternative)
 
 ```bash
 # Build the image
@@ -233,20 +287,50 @@ By default, data is stored in the `/data` directory:
 
 ## Troubleshooting
 
+### Coolify Deployment Issues
+
+**Application won't start:**
+- Check Coolify build logs for errors
+- Verify all required environment variables are set
+- Ensure `REPLICATE_API_TOKEN` is provided (required for Generate tab)
+- Check that persistent volume is properly mounted to `/data`
+
+**Environment variables not working:**
+- Environment variables must be added through Coolify dashboard, not `.env` files
+- After adding/changing variables, redeploy the application
+- Verify variables are set correctly (no typos in names)
+
+**Data loss after redeployment:**
+- Ensure persistent volume is configured and mounted to `/data`
+- Check volume source is persistent (not ephemeral)
+- Verify volume permissions allow writing
+
+**Health check failing:**
+- Ensure health check path is `/api/health` (not just `/health`)
+- Verify port is 3000 or matches your custom `PORT` variable
+- Check application logs for startup errors
+
 ### PSD Processing Issues
 - Ensure Python dependencies are installed: `pip install psd-tools pillow`
 - Check PSD file has proper smart layers
 - Verify layer names contain keywords like "design", "artwork", or "logo"
 
 ### AI Generation Errors
-- Verify `REPLICATE_API_TOKEN` is set correctly
-- Check you have credits in your Replicate account
+- Verify `REPLICATE_API_TOKEN` is set correctly in Coolify environment variables
+- Check you have credits in your Replicate account at https://replicate.com/account
 - Review browser console and server logs for details
+- Test the health endpoint (`/api/health`) to see if the token is detected
+
+### Listing Generation Issues
+- `ANTHROPIC_API_KEY` is optional - app works without it using templates
+- If provided, verify the key starts with `sk-ant-`
+- Check Anthropic account has available credits
 
 ### Image Upload Failures
 - Check file size limits (max 50MB)
-- Verify file format is supported
+- Verify file format is supported (PSD, JPG, PNG, WebP)
 - Ensure sufficient disk space in data directory
+- For Coolify: verify persistent volume has enough space
 
 ## Performance
 

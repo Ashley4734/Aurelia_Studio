@@ -1,5 +1,16 @@
 # ===========================
 # Aurelia Studio v2 - Complete Working Version with Enhanced PSD Processing
+# Optimized for Coolify Deployment
+# ===========================
+#
+# Environment variables (configure via Coolify dashboard):
+# - REPLICATE_API_TOKEN (required for AI generation)
+# - ANTHROPIC_API_KEY (optional for enhanced listings)
+# - PORT (default: 3000)
+# - DATA_DIR (default: /data)
+# - NODE_ENV (default: production)
+#
+# See COOLIFY.md for detailed deployment instructions
 # ===========================
 
 FROM node:18-alpine AS frontend-builder
