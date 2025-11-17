@@ -1,0 +1,503 @@
+import React, { useState } from 'react';
+import { motion } from 'framer-motion';
+import toast from 'react-hot-toast';
+import { Sparkles, Zap, Settings, CheckCircle, Download, Eye } from 'lucide-react';
+
+export default function GenerateTab() {
+  const [prompts, setPrompts] = useState('');
+  const [generating, setGenerating] = useState(false);
+  const [results, setResults] = useState([]);
+  const [currentPrompt, setCurrentPrompt] = useState('');
+  const [generationProgress, setGenerationProgress] = useState(0);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  // SeedreamS-3 Parameters
+  const [aspectRatio, setAspectRatio] = useState('1:1');
+  const [size, setSize] = useState('regular');
+  const [guidanceScale, setGuidanceScale] = useState(3.5);
+  const [useRandomSeed, setUseRandomSeed] = useState(true);
+
+  const generateImages = async () => {
+    const promptLines = prompts.split('\n').map(p => p.trim()).filter(p => p.length > 0);
+
+    if (promptLines.length === 0) {
+      toast.error('Enter at least one prompt');
+      return;
+    }
+
+    console.log('🎨 Starting generation for prompts:', promptLines);
+    console.log('📐 Using parameters:', { aspectRatio, size, guidanceScale, useRandomSeed });
+
+    setGenerating(true);
+    setResults([]);
+    setGenerationProgress(0);
+
+    try {
+      const newResults = [];
+      const totalPrompts = promptLines.length;
+
+      for (let i = 0; i < promptLines.length; i++) {
+        const prompt = promptLines[i];
+        setCurrentPrompt(prompt);
+        setGenerationProgress(((i) / totalPrompts) * 100);
+
+        console.log(`🎯 Processing prompt ${i + 1}/${totalPrompts}: "${prompt}"`);
+
+        try {
+          // Prepare generation parameters with frontend values
+          const requestBody = {
+            prompt,
+            aspect_ratio: aspectRatio,      // Use selected aspect ratio
+            size: size,                     // Use selected size
+            guidance_scale: guidanceScale   // Use selected guidance scale
+          };
+
+          // Handle seed parameter properly
+          if (useRandomSeed) {
+            requestBody.seed = Math.floor(Math.random() * 1000000);
+          }
+          // If useRandomSeed is false, don't include seed parameter
+
+          console.log('📋 Request body:', requestBody);
+
+          const response = await fetch('/api/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestBody)
+          });
+
+          console.log('📡 Response status:', response.status);
+
+          const responseData = await response.json();
+          console.log('📦 Response data:', responseData);
+
+          if (response.ok && responseData.success) {
+            const result = {
+              ...responseData,
+              id: Date.now() + Math.random(),
+              parameters: {
+                aspect_ratio: aspectRatio,
+                size: size,
+                guidance_scale: guidanceScale,
+                seed: requestBody.seed
+              }
+            };
+            newResults.push(result);
+            console.log(`✅ Successfully generated image for: "${prompt}"`);
+            console.log(`📐 Generated with: ${aspectRatio}, ${size}, guidance: ${guidanceScale}`);
+            toast.success(`Generated image ${i + 1}/${totalPrompts}`);
+          } else {
+            console.error(`❌ Failed to generate image for: "${prompt}"`, responseData);
+            toast.error(`Failed: ${responseData.error || 'Unknown error'}`);
+
+            if (responseData.details) {
+              console.error('Error details:', responseData.details);
+            }
+          }
+        } catch (fetchError) {
+          console.error(`❌ Network error for prompt "${prompt}":`, fetchError);
+          toast.error(`Network error for prompt ${i + 1}`);
+        }
+      }
+
+      setGenerationProgress(100);
+      setCurrentPrompt('');
+      setResults(newResults);
+
+      if (newResults.length > 0) {
+        toast.success(`Generated ${newResults.length} image(s) with SeedreamS-3!`, {
+          icon: '🎨',
+          duration: 4000
+        });
+      } else {
+        toast.error('No images were generated. Check console for details.', {
+          duration: 6000
+        });
+      }
+
+      console.log(`🏁 Generation complete. Successfully generated ${newResults.length}/${totalPrompts} images`);
+
+    } catch (error) {
+      console.error('❌ Generation process failed:', error);
+      toast.error('Generation process failed');
+    } finally {
+      setGenerating(false);
+      setGenerationProgress(0);
+      setCurrentPrompt('');
+    }
+  };
+
+  const testConnection = async () => {
+    try {
+      const response = await fetch('/api/health');
+      const health = await response.json();
+
+      if (health.status === 'healthy') {
+        toast.success('Server connection OK');
+        console.log('🏥 Health check:', health);
+      } else {
+        toast.error('Server health check failed');
+      }
+    } catch (error) {
+      toast.error('Cannot connect to server');
+      console.error('Health check failed:', error);
+    }
+  };
+
+  const downloadImage = async (imageUrl, prompt, index) => {
+    try {
+      const response = await fetch(imageUrl);
+      const blob = await response.blob();
+
+      // Create filename from prompt (sanitized) or use index
+      const sanitizedPrompt = prompt.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').substring(0, 50);
+      const filename = `generated_${sanitizedPrompt || `image_${index + 1}`}_${Date.now()}.jpg`;
+
+      // Create download link
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast.success('Image downloaded successfully!');
+    } catch (error) {
+      console.error('Download failed:', error);
+      toast.error('Failed to download image');
+    }
+  };
+
+  const downloadAllImages = async () => {
+    if (results.length === 0) return;
+
+    try {
+      toast.loading('Preparing download...', { id: 'download-all' });
+
+      // Import JSZip dynamically (if available) or create a simple solution
+      const imageBlobs = await Promise.all(
+        results.map(async (result, index) => {
+          const response = await fetch(result.imageUrl);
+          const blob = await response.blob();
+          const sanitizedPrompt = result.prompt.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').substring(0, 30);
+          const filename = `${sanitizedPrompt || `image_${index + 1}`}.jpg`;
+          return { blob, filename };
+        })
+      );
+
+      // For now, create individual downloads (can be enhanced with ZIP later)
+      for (let i = 0; i < imageBlobs.length; i++) {
+        const { blob, filename } = imageBlobs[i];
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${i + 1}_${filename}`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        // Small delay between downloads
+        if (i < imageBlobs.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+
+      toast.success(`Downloaded ${results.length} images!`, { id: 'download-all' });
+    } catch (error) {
+      console.error('Batch download failed:', error);
+      toast.error('Failed to download images', { id: 'download-all' });
+    }
+  };
+
+  return (
+    <div className="space-y-8">
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass rounded-3xl p-8 border border-white/20">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-2xl font-semibold text-slate-800 flex items-center gap-3">
+            <Sparkles className="w-6 h-6 text-accent-500" />
+            AI Art Generation
+            <span className="text-sm bg-purple-100 text-purple-700 px-2 py-1 rounded-full">SeedreamS-3</span>
+          </h3>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className="text-sm bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1 rounded-full transition-colors flex items-center gap-1"
+            >
+              <Settings className="w-3 h-3" />
+              Advanced
+            </button>
+            <button
+              onClick={testConnection}
+              className="text-sm bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1 rounded-full transition-colors"
+            >
+              Test Connection
+            </button>
+          </div>
+        </div>
+
+        {/* Advanced Parameters */}
+        {showAdvanced && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            className="mb-6 p-4 bg-slate-50 rounded-xl border border-slate-200"
+          >
+            <h4 className="font-medium text-slate-700 mb-4 flex items-center gap-2">
+              <Settings className="w-4 h-4" />
+              Generation Parameters
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-600 mb-2">Aspect Ratio</label>
+                <select
+                  value={aspectRatio}
+                  onChange={(e) => setAspectRatio(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-accent-500 focus:border-accent-500"
+                >
+                  <option value="1:1">Square (1:1)</option>
+                  <option value="16:9">Landscape (16:9)</option>
+                  <option value="9:16">Portrait (9:16)</option>
+                  <option value="4:3">Classic (4:3)</option>
+                  <option value="3:4">Portrait (3:4)</option>
+                  <option value="21:9">Ultra-wide (21:9)</option>
+                  <option value="3:2">Camera (3:2)</option>
+                  <option value="2:3">Vertical (2:3)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-600 mb-2">Image Size</label>
+                <select
+                  value={size}
+                  onChange={(e) => setSize(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-accent-500 focus:border-accent-500"
+                >
+                  <option value="small">Small (512px min)</option>
+                  <option value="regular">Regular (1MP)</option>
+                  <option value="big">Big (2048px max)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-600 mb-2">
+                  Guidance Scale: {guidanceScale}
+                </label>
+                <input
+                  type="range"
+                  min="1"
+                  max="10"
+                  step="0.5"
+                  value={guidanceScale}
+                  onChange={(e) => setGuidanceScale(parseFloat(e.target.value))}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-slate-500 mt-1">
+                  <span>Creative</span>
+                  <span>Literal</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={useRandomSeed}
+                  onChange={(e) => setUseRandomSeed(e.target.checked)}
+                  className="rounded"
+                />
+                <span className="text-sm text-slate-600">Use random seed for variety</span>
+              </label>
+            </div>
+
+            {/* Current Settings Display */}
+            <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+              <div className="text-sm text-blue-700">
+                <strong>Current Settings:</strong> {aspectRatio} • {size} • Guidance: {guidanceScale} • Seed: {useRandomSeed ? 'Random' : 'Fixed'}
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-slate-700 mb-2">
+            Enter prompts (one per line)
+          </label>
+          <textarea
+            value={prompts}
+            onChange={(e) => setPrompts(e.target.value)}
+            placeholder="beautiful landscape painting
+abstract geometric art
+fantasy dragon illustration
+cyberpunk city at night"
+            rows={6}
+            className="w-full px-4 py-4 bg-white/70 border border-white/50 rounded-xl focus:outline-none focus:ring-2 focus:ring-accent-500 resize-none font-mono text-sm"
+          />
+          <p className="text-xs text-slate-500 mt-2">
+            Each line will generate one image. Be descriptive for better results with SeedreamS-3.
+          </p>
+        </div>
+
+        {/* Progress Section */}
+        {generating && (
+          <div className="mb-6 p-4 bg-blue-50 rounded-xl border border-blue-200">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+              <span className="text-sm font-medium text-blue-700">Generating with SeedreamS-3...</span>
+            </div>
+            {currentPrompt && (
+              <p className="text-sm text-blue-600 mb-2">Current: {currentPrompt}</p>
+            )}
+            <div className="w-full bg-blue-200 rounded-full h-2">
+              <div
+                className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                style={{ width: `${generationProgress}%` }}
+              ></div>
+            </div>
+            <p className="text-xs text-blue-500 mt-1">{Math.round(generationProgress)}% complete</p>
+          </div>
+        )}
+
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          onClick={generateImages}
+          disabled={generating || !prompts.trim()}
+          className="w-full flex items-center justify-center gap-3 px-8 py-4 bg-gradient-to-r from-accent-500 to-primary-500 text-white rounded-2xl font-semibold text-lg disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg transition-all"
+        >
+          {generating ? (
+            <>
+              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              Generating...
+            </>
+          ) : (
+            <>
+              <Zap className="w-5 h-5" />
+              Generate with SeedreamS-3
+            </>
+          )}
+        </motion.button>
+      </motion.div>
+
+      {/* Results Section */}
+      {results.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="glass rounded-3xl p-6 border border-white/20"
+        >
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-2">
+              <CheckCircle className="w-5 h-5 text-green-500" />
+              <h4 className="text-xl font-semibold text-slate-800">
+                Generated Artwork ({results.length})
+              </h4>
+            </div>
+            {results.length > 1 && (
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={downloadAllImages}
+                className="flex items-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-xl font-medium transition-colors"
+              >
+                <Download className="w-4 h-4" />
+                Download All
+              </motion.button>
+            )}
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {results.map((result, index) => (
+              <motion.div
+                key={result.id}
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="bg-white/70 rounded-2xl overflow-hidden border border-white/50 hover:shadow-lg transition-all"
+              >
+                <div className="aspect-square bg-slate-100 relative group">
+                  <img
+                    src={result.imageUrl}
+                    alt={result.prompt}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      console.error('Image failed to load:', result.imageUrl);
+                      e.target.style.display = 'none';
+                      e.target.nextSibling.style.display = 'flex';
+                    }}
+                  />
+                  <div className="absolute inset-0 bg-slate-200 flex items-center justify-center text-slate-500 text-sm" style={{display: 'none'}}>
+                    Failed to load image
+                  </div>
+
+                  {/* Hover overlay with action buttons */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-between p-3">
+                    <button
+                      onClick={() => downloadImage(result.imageUrl, result.prompt, index)}
+                      className="p-2 bg-white/90 hover:bg-white rounded-lg transition-colors"
+                      title="Download Image"
+                    >
+                      <Download className="w-4 h-4 text-slate-700" />
+                    </button>
+                    <button
+                      onClick={() => window.open(result.imageUrl, '_blank')}
+                      className="p-2 bg-white/90 hover:bg-white rounded-lg transition-colors"
+                      title="View Full Size"
+                    >
+                      <Eye className="w-4 h-4 text-slate-700" />
+                    </button>
+                  </div>
+                </div>
+                <div className="p-4">
+                  <p className="text-sm text-slate-600 mb-2 overflow-hidden" style={{display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical'}}>{result.prompt}</p>
+                  <div className="flex items-center justify-between text-xs">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-slate-400">
+                        {result.parameters?.aspect_ratio} • {result.parameters?.size}
+                      </span>
+                      <span className="text-slate-400">
+                        Guidance: {result.parameters?.guidance_scale}
+                      </span>
+                      {result.parameters?.seed && (
+                        <span className="text-slate-400">
+                          Seed: {result.parameters.seed}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => downloadImage(result.imageUrl, result.prompt, index)}
+                      className="bg-primary-100 text-primary-700 px-2 py-1 rounded-full hover:bg-primary-200 transition-colors flex items-center gap-1"
+                    >
+                      <Download className="w-3 h-3" />
+                      Save
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </motion.div>
+      )}
+
+      {/* Debug Info */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="text-center"
+      >
+        <details className="inline-block text-left">
+          <summary className="text-sm text-slate-500 cursor-pointer hover:text-slate-700">
+            Debug Information
+          </summary>
+          <div className="mt-2 p-3 bg-slate-100 rounded-lg text-xs text-slate-600 max-w-md">
+            <p>Check browser console (F12) for detailed logs</p>
+            <p>API endpoint: /api/generate</p>
+            <p>Model: bytedance/seedream-3</p>
+            <p>Current settings: {aspectRatio} • {size} • Guidance: {guidanceScale}</p>
+            <p className="mt-2 text-slate-500">💡 Tip: Click download buttons to save images locally</p>
+          </div>
+        </details>
+      </motion.div>
+    </div>
+  );
+}
