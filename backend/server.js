@@ -1008,6 +1008,135 @@ app.post('/api/generate', async (req, res) => {
   }
 });
 
+// Python script to add DPI metadata using PIL
+const createDPIProcessorScript = () => {
+  return `
+import sys
+import json
+import base64
+from PIL import Image
+import io
+
+try:
+    input_data = json.loads(sys.stdin.read())
+    image_b64 = input_data['image']
+
+    # Decode base64
+    if ',' in image_b64:
+        image_b64 = image_b64.split(',')[1]
+    image_data = base64.b64decode(image_b64)
+
+    # Open image with PIL
+    img = Image.open(io.BytesIO(image_data))
+
+    # Convert to RGB if needed
+    if img.mode in ('RGBA', 'LA', 'P'):
+        if img.mode == 'RGBA' or img.mode == 'LA':
+            # Create white background
+            background = Image.new('RGB', img.size, (255, 255, 255))
+            if img.mode == 'RGBA':
+                background.paste(img, mask=img.split()[-1])
+            else:
+                background.paste(img)
+            img = background
+        else:
+            img = img.convert('RGB')
+    elif img.mode != 'RGB':
+        img = img.convert('RGB')
+
+    # Save with 300 DPI
+    output = io.BytesIO()
+    img.save(output, format='JPEG', quality=95, optimize=True, dpi=(300, 300))
+
+    # Return base64 result
+    result = base64.b64encode(output.getvalue()).decode('utf-8')
+    print(json.dumps({'success': True, 'image': result}))
+
+except Exception as e:
+    print(json.dumps({'success': False, 'error': str(e)}))
+    sys.exit(1)
+`;
+};
+
+// Download proxy endpoint to add 300 DPI metadata to images
+app.post('/api/download-with-dpi', async (req, res) => {
+  try {
+    const { imageUrl, filename } = req.body;
+
+    if (!imageUrl) {
+      return res.status(400).json({ error: 'Image URL required' });
+    }
+
+    console.log(`📥 Downloading and processing image with 300 DPI: ${imageUrl}`);
+
+    // Fetch the image from the URL
+    const imageResponse = await axios.get(imageUrl, {
+      responseType: 'arraybuffer',
+      timeout: 30000
+    });
+
+    const imageBuffer = Buffer.from(imageResponse.data);
+    const imageB64 = imageBuffer.toString('base64');
+
+    // Use Python PIL to set DPI (most reliable method)
+    const python = spawn('python3', ['-c', createDPIProcessorScript()]);
+
+    let stdout = '';
+    let stderr = '';
+
+    python.stdout.on('data', (data) => {
+      stdout += data.toString();
+    });
+
+    python.stderr.on('data', (data) => {
+      stderr += data.toString();
+    });
+
+    python.on('close', (code) => {
+      if (code === 0) {
+        try {
+          const result = JSON.parse(stdout.trim());
+          if (result.success) {
+            const processedBuffer = Buffer.from(result.image, 'base64');
+
+            // Set appropriate headers
+            const safeFileName = filename ? safeFilename(filename) : 'artwork.jpg';
+            res.set({
+              'Content-Type': 'image/jpeg',
+              'Content-Disposition': `attachment; filename="${safeFileName}"`,
+              'X-DPI-Processing': 'true',
+              'X-DPI-Value': '300'
+            });
+
+            res.send(processedBuffer);
+            console.log(`✅ Image processed and sent with 300 DPI: ${safeFileName}`);
+          } else {
+            console.error('❌ Python processing failed:', result.error);
+            res.status(500).json({ error: 'Image processing failed', details: result.error });
+          }
+        } catch (parseError) {
+          console.error('❌ Failed to parse Python output:', parseError);
+          res.status(500).json({ error: 'Processing output parse failed' });
+        }
+      } else {
+        console.error('❌ Python process failed:', stderr);
+        res.status(500).json({ error: 'Python process failed', details: stderr });
+      }
+    });
+
+    // Send input to Python
+    python.stdin.write(JSON.stringify({ image: imageB64 }));
+    python.stdin.end();
+
+  } catch (error) {
+    console.error('❌ Download proxy failed:', error.message);
+    res.status(500).json({
+      error: 'Failed to process image',
+      details: error.message
+    });
+  }
+});
+
 app.post('/api/listing-from-image', upload.single('image'), async (req, res) => {
   try {
     const file = req.file;
