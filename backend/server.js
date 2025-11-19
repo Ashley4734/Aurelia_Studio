@@ -434,9 +434,9 @@ def main():
         elif result_image.mode != 'RGB':
             result_image = result_image.convert('RGB')
 
-        # Save to buffer
+        # Save to buffer with 300 DPI
         output_buffer = io.BytesIO()
-        result_image.save(output_buffer, format='JPEG', quality=90, optimize=True)
+        result_image.save(output_buffer, format='JPEG', quality=90, optimize=True, dpi=(300, 300))
 
         # Return base64 encoded result
         result_b64 = base64.b64encode(output_buffer.getvalue()).decode('utf-8')
@@ -589,6 +589,7 @@ const sharpFallbackProcessor = async (mockupData, artworkData, filename) => {
         top: top,
         blend: 'over'
       }])
+      .withMetadata({ density: 300 })
       .jpeg({ quality: 90, mozjpeg: true })
       .toBuffer();
 
@@ -761,7 +762,11 @@ app.post('/api/package-artwork', upload.single('image'), async (req, res) => {
     const { path: filePath } = req.file;
     const baseName = safeFilename(path.parse(req.file.originalname).name);
 
-    const fourK = await sharp(filePath).resize(3840, 2160, { fit: 'cover' }).png().toBuffer();
+    const fourK = await sharp(filePath)
+      .resize(3840, 2160, { fit: 'cover' })
+      .withMetadata({ density: 300 })
+      .png()
+      .toBuffer();
 
     const doc = new jsPDF();
     doc.setFillColor(59, 130, 246);
