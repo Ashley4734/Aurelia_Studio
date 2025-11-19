@@ -1011,6 +1011,36 @@ app.post('/api/listing-from-image', upload.single('image'), async (req, res) => 
     const baseName = safeFilename(path.parse(file.originalname).name);
     const key = process.env.ANTHROPIC_API_KEY;
 
+    // Detect image dimensions and aspect ratio
+    let imageMetadata = null;
+    let artworkType = 'digital'; // default
+    try {
+      imageMetadata = await sharp(file.path).metadata();
+      const width = imageMetadata.width;
+      const height = imageMetadata.height;
+      const aspectRatio = width / height;
+
+      console.log(`📐 Image dimensions: ${width}x${height}, aspect ratio: ${aspectRatio.toFixed(2)}`);
+
+      // Determine artwork type based on aspect ratio
+      // 16:9 = 1.778, 4:5 = 0.8
+      if (aspectRatio >= 1.6 && aspectRatio <= 1.9) {
+        artworkType = 'tv'; // 16:9 for TV artwork
+        console.log('🖼️ Detected TV Artwork (16:9)');
+      } else if (aspectRatio >= 0.75 && aspectRatio <= 0.85) {
+        artworkType = 'wall'; // 4:5 for wall artwork (16x20")
+        console.log('🖼️ Detected Wall Artwork (4:5 / 16x20")');
+      } else if (aspectRatio < 1) {
+        artworkType = 'wall'; // Portrait orientation - default to wall art
+        console.log('🖼️ Detected Portrait Wall Artwork');
+      } else {
+        artworkType = 'tv'; // Landscape orientation - default to TV art
+        console.log('🖼️ Detected Landscape Digital Artwork');
+      }
+    } catch (metaError) {
+      console.warn('⚠️ Could not read image metadata:', metaError.message);
+    }
+
     if (key?.startsWith('sk-ant-')) {
       console.log('🔍 Using Claude API for image analysis...');
       try {
@@ -1045,15 +1075,15 @@ app.post('/api/listing-from-image', upload.single('image'), async (req, res) => 
 - What elements, objects, or themes are present?
 - Is it seasonal (Christmas, Halloween, etc.) or thematic?
 
-STEP 2: Based on your detailed visual analysis above, create a comprehensive Etsy listing optimized for selling this specific artwork as Frame TV art and digital downloads.
+STEP 2: Based on your detailed visual analysis above, create a comprehensive Etsy listing optimized for selling this specific artwork as ${artworkType === 'tv' ? 'Frame TV art and digital displays' : 'printable wall art (16x20") and digital downloads'}.
 
 CRITICAL: The listing MUST be based on the ACTUAL CONTENT you see in the image. Do not create generic content. If you see a Christmas scene, mention Christmas. If you see flowers, mention flowers. Be specific and accurate.
 
-IMPORTANT: This artwork will be sold as a DIGITAL DOWNLOAD for customers to display on Samsung Frame TV and other digital displays or print at home.
+IMPORTANT: This artwork will be sold as a DIGITAL DOWNLOAD for customers to ${artworkType === 'tv' ? 'display on Samsung Frame TV and other digital displays (16:9 aspect ratio)' : 'print at home or professionally (16x20" / 4:5 aspect ratio) or display digitally'}.
 
 Create an Etsy-optimized listing with:
 
-1. **title**: SEO-optimized title (max 140 characters) that describes what's actually in the image. Must include "Frame TV Art" and "Digital Download". Example: "Christmas Winter Scene Frame TV Art Digital Download Festive Holiday Wall Decor"
+1. **title**: SEO-optimized title (max 140 characters) that describes what's actually in the image. ${artworkType === 'tv' ? 'Must include "Frame TV Art" and "Digital Download".' : 'Must include "Printable Wall Art", "16x20", and "Digital Download".'} Example: ${artworkType === 'tv' ? '"Christmas Winter Scene Frame TV Art Digital Download Festive Holiday Wall Decor"' : '"Christmas Winter Scene Printable Wall Art 16x20 Digital Download Holiday Decor"'}
 
 2. **seoTitle**: Alternative SEO title variation based on the actual image content
 
@@ -1062,15 +1092,15 @@ Create an Etsy-optimized listing with:
 4. **description**: Full product description (4-6 paragraphs) including:
    - Eye-catching opening describing THIS SPECIFIC artwork and what it shows
    - What's included (file formats, sizes, resolution)
-   - How to use it (Frame TV, digital displays, printing)
+   - How to use it ${artworkType === 'tv' ? '(Frame TV, digital displays, 16:9 format)' : '(print at 16x20", frame and hang, or display digitally)'}
    - Benefits (instant download, high quality, versatile)
    - Perfect for (specific rooms, occasions based on the image theme, gift ideas)
 
-5. **tags**: Array of exactly 13 Etsy tags based on what's ACTUALLY in the image. Include: "frame tv art", "digital download", and 11 tags describing the actual content, style, colors, and theme
+5. **tags**: Array of exactly 13 Etsy tags based on what's ACTUALLY in the image. Include: ${artworkType === 'tv' ? '"frame tv art", "digital download"' : '"printable wall art", "16x20 print", "digital download"'}, and 11 tags describing the actual content, style, colors, and theme
 
-6. **materials**: What the listing includes (e.g., "Digital file - JPG, PNG")
+6. **materials**: What the listing includes ${artworkType === 'tv' ? '(e.g., "Digital file - High-resolution JPG and PNG (16:9 aspect ratio for Frame TV)")' : '(e.g., "Digital file - High-resolution JPG and PNG (16x20 inches, 300 DPI)")'}
 
-7. **suggestedPrice**: Price in USD based on artwork complexity and market value (typically $4.99-$19.99 for digital art)
+7. **suggestedPrice**: Price in USD based on artwork complexity and market value (typically ${artworkType === 'tv' ? '$4.99-$12.99 for TV digital art' : '$6.99-$19.99 for printable wall art'})
 
 8. **shopSection**: Category based on actual content (e.g., "Christmas Art", "Botanical Art", "Abstract Art", "Seasonal Art")
 
@@ -1131,62 +1161,79 @@ Return ONLY valid JSON with all these fields. No markdown, no explanation, just 
     ];
 
     const style = styles[Math.floor(Math.random() * styles.length)];
-    const price = (Math.floor(Math.random() * 10) + 5) + '.99';
+    const basePrice = artworkType === 'wall' ? Math.floor(Math.random() * 10) + 10 : Math.floor(Math.random() * 8) + 5;
+    const price = basePrice + '.99';
 
     cleanup(file.path);
 
+    // Adaptive templates based on artwork type
+    const isTVArt = artworkType === 'tv';
+    const baseTitle = isTVArt
+      ? `${style.name} Frame TV Art Digital Download Samsung Frame TV Wall Decor 16:9`
+      : `${style.name} Printable Wall Art 16x20 Digital Download Modern Home Decor Print`;
+
+    const baseTags = isTVArt
+      ? ['frame tv art', 'digital download', 'samsung frame tv']
+      : ['printable wall art', '16x20 print', 'digital download'];
+
+    const materials = isTVArt
+      ? 'Digital file - High-resolution JPG and PNG (16:9 aspect ratio, 3840x2160px for Frame TV)'
+      : 'Digital file - High-resolution JPG and PNG (16x20 inches, 300 DPI, print-ready)';
+
+    const howToUse = isTVArt
+      ? 'Simply download the files and display them on your Samsung Frame TV or other digital displays. The 16:9 aspect ratio ensures perfect fit on most TVs and monitors.'
+      : 'Download and print at home on your printer, or upload to a professional print service like Costco, Walgreens, or an online printer. Frame in a standard 16x20" frame and hang on your wall. Files are 300 DPI for crisp, gallery-quality prints.';
+
+    const perfectFor = isTVArt
+      ? '• Samsung Frame TV owners\n• Living rooms and entertainment areas\n• Modern and contemporary home decor\n• Digital art collectors\n• Smart home enthusiasts'
+      : '• Home printing and professional printing\n• Standard 16x20" frames (widely available)\n• Living rooms, bedrooms, offices, nurseries\n• Gallery walls and home decor projects\n• Affordable art for renters and homeowners';
+
     res.json({
-      title: `${style.name} Wall Art Frame TV Art Digital Download Printable Modern Home Decor`,
-      seoTitle: `${style.name} Digital Art Print - Samsung Frame TV - Instant Download Wall Art`,
-      shortDescription: `Transform your space with this stunning ${style.name.toLowerCase()} digital artwork. Perfect for Frame TV, digital displays, or printing. Instant download, high-resolution files included.`,
-      description: `Beautiful ${style.name.toLowerCase()} artwork designed for modern living spaces and digital displays.
+      title: baseTitle,
+      seoTitle: `${style.name} Digital Art ${isTVArt ? 'Frame TV' : '16x20 Print'} - Instant Download Wall Art`,
+      shortDescription: `Transform your space with this stunning ${style.name.toLowerCase()} digital artwork. Perfect for ${isTVArt ? 'Frame TV and digital displays (16:9)' : 'printing at 16x20" or displaying digitally'}. Instant download, high-resolution files included.`,
+      description: `Beautiful ${style.name.toLowerCase()} artwork designed for modern living spaces${isTVArt ? ' and digital displays' : ' and printing'}.
 
 WHAT'S INCLUDED:
-• High-resolution digital files (4K quality - 3840x2160px)
+• High-resolution digital files ${isTVArt ? '(4K quality - 3840x2160px, 16:9)' : '(16x20 inches, 300 DPI)'}
 • Multiple formats: JPG and PNG
 • Instant download - no shipping wait
-• Print-ready files for home printing
-• Perfect for Samsung Frame TV and other smart displays
+• ${isTVArt ? 'Optimized for Frame TV and digital displays' : 'Print-ready files for home or professional printing'}
+• ${isTVArt ? 'Perfect 16:9 aspect ratio for TVs and monitors' : 'Fits standard 16x20" frames'}
 
 HOW TO USE:
-Simply download the files and display them on your Frame TV, upload to digital picture frames, or print at home or through a professional print service. The high-resolution 4K format ensures crisp, clear display on any screen size.
+${howToUse}
 
 PERFECT FOR:
-• Living rooms, bedrooms, offices, and entryways
-• Modern and contemporary home decor
-• Unique housewarming or holiday gifts
-• Interior designers and home stagers
-• Frame TV owners seeking beautiful artwork
+${perfectFor}
 
 This is a DIGITAL DOWNLOAD only - no physical items will be shipped. Files are delivered instantly after purchase via Etsy's download system.`,
       tags: [
-        'frame tv art',
-        'digital download',
+        ...baseTags,
         'wall art',
-        'printable art',
         ...style.tags,
         'instant download',
         'home decor',
         'modern wall art',
-        '4k art',
+        isTVArt ? '16:9 art' : 'printable art',
         'digital art print'
       ].slice(0, 13),
-      materials: 'Digital file - High-resolution JPG and PNG (4K, 3840x2160px)',
+      materials: materials,
       suggestedPrice: price,
       shopSection: style.section,
       keywords: [
-        'frame tv art',
-        'samsung frame tv',
+        ...(isTVArt ? ['frame tv art', 'samsung frame tv', '16:9 digital art'] : ['printable wall art', '16x20 print', 'wall art print']),
         'digital download art',
-        'printable wall art',
         style.name.toLowerCase() + ' art',
         'instant download',
         'home decor',
         'wall art digital',
-        '4k artwork',
+        isTVArt ? '4k artwork' : 'printable decor',
         'modern home decor'
       ],
-      targetAudience: 'Frame TV owners, home decor enthusiasts, renters seeking damage-free decor',
+      targetAudience: isTVArt
+        ? 'Frame TV owners, smart home enthusiasts, digital art collectors, modern home decorators'
+        : 'DIY home decorators, print-at-home enthusiasts, gallery wall creators, budget-conscious decorators',
       colors: ['Multi-color'],
       style: style.name
     });

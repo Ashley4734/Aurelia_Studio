@@ -10,10 +10,11 @@ export default function GenerateTab() {
   const [currentPrompt, setCurrentPrompt] = useState('');
   const [generationProgress, setGenerationProgress] = useState(0);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [artworkType, setArtworkType] = useState('tv'); // 'tv' or 'wall'
 
   // SeedreamS-3 Parameters
-  const [aspectRatio, setAspectRatio] = useState('1:1');
-  const [size, setSize] = useState('regular');
+  const [aspectRatio, setAspectRatio] = useState('16:9');
+  const [size, setSize] = useState('big');
   const [guidanceScale, setGuidanceScale] = useState(3.5);
   const [useRandomSeed, setUseRandomSeed] = useState(true);
 
@@ -212,6 +213,18 @@ export default function GenerateTab() {
     }
   };
 
+  // Switch artwork type and update preset settings
+  const switchArtworkType = (type) => {
+    setArtworkType(type);
+    if (type === 'tv') {
+      setAspectRatio('16:9');
+      setSize('big');
+    } else if (type === 'wall') {
+      setAspectRatio('4:5');
+      setSize('big');
+    }
+  };
+
   return (
     <div className="space-y-8">
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass rounded-3xl p-8 border border-white/20">
@@ -238,6 +251,56 @@ export default function GenerateTab() {
           </div>
         </div>
 
+        {/* Artwork Type Selection */}
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-slate-700 mb-3">Artwork Type</label>
+          <div className="grid grid-cols-2 gap-4">
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => switchArtworkType('tv')}
+              className={`p-4 rounded-xl border-2 transition-all ${
+                artworkType === 'tv'
+                  ? 'border-accent-500 bg-accent-50'
+                  : 'border-slate-200 bg-white hover:border-accent-300'
+              }`}
+            >
+              <div className="text-left">
+                <h4 className={`font-semibold mb-1 ${artworkType === 'tv' ? 'text-accent-700' : 'text-slate-700'}`}>
+                  TV Artwork
+                </h4>
+                <p className="text-sm text-slate-600 mb-2">For Samsung Frame TV and digital displays</p>
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <span className="bg-slate-100 px-2 py-1 rounded">16:9 aspect ratio</span>
+                  <span className="bg-slate-100 px-2 py-1 rounded">2048px max</span>
+                </div>
+              </div>
+            </motion.button>
+
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => switchArtworkType('wall')}
+              className={`p-4 rounded-xl border-2 transition-all ${
+                artworkType === 'wall'
+                  ? 'border-primary-500 bg-primary-50'
+                  : 'border-slate-200 bg-white hover:border-primary-300'
+              }`}
+            >
+              <div className="text-left">
+                <h4 className={`font-semibold mb-1 ${artworkType === 'wall' ? 'text-primary-700' : 'text-slate-700'}`}>
+                  Wall Artwork
+                </h4>
+                <p className="text-sm text-slate-600 mb-2">For printing and wall display (16x20")</p>
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <span className="bg-slate-100 px-2 py-1 rounded">4:5 aspect ratio</span>
+                  <span className="bg-slate-100 px-2 py-1 rounded">2048px max</span>
+                </div>
+              </div>
+            </motion.button>
+          </div>
+        </div>
+
         {/* Advanced Parameters */}
         {showAdvanced && (
           <motion.div
@@ -258,7 +321,8 @@ export default function GenerateTab() {
                   className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-accent-500 focus:border-accent-500"
                 >
                   <option value="1:1">Square (1:1)</option>
-                  <option value="16:9">Landscape (16:9)</option>
+                  <option value="16:9">TV Landscape (16:9)</option>
+                  <option value="4:5">Wall Portrait (4:5 / 16x20")</option>
                   <option value="9:16">Portrait (9:16)</option>
                   <option value="4:3">Classic (4:3)</option>
                   <option value="3:4">Portrait (3:4)</option>
