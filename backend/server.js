@@ -1023,13 +1023,13 @@ app.post('/api/listing-from-image', upload.single('image'), async (req, res) => 
       console.log(`📐 Image dimensions: ${width}x${height}, aspect ratio: ${aspectRatio.toFixed(2)}`);
 
       // Determine artwork type based on aspect ratio
-      // 16:9 = 1.778, 4:5 = 0.8
+      // 16:9 = 1.778, 3:4 = 0.75 (used for wall art, close to 4:5 = 0.8 / 16x20")
       if (aspectRatio >= 1.6 && aspectRatio <= 1.9) {
         artworkType = 'tv'; // 16:9 for TV artwork
         console.log('🖼️ Detected TV Artwork (16:9)');
       } else if (aspectRatio >= 0.75 && aspectRatio <= 0.85) {
-        artworkType = 'wall'; // 4:5 for wall artwork (16x20")
-        console.log('🖼️ Detected Wall Artwork (4:5 / 16x20")');
+        artworkType = 'wall'; // 3:4 for wall artwork (closest to 16x20" which is 4:5)
+        console.log('🖼️ Detected Wall Artwork (3:4 aspect ratio, suitable for 16x20" prints)');
       } else if (aspectRatio < 1) {
         artworkType = 'wall'; // Portrait orientation - default to wall art
         console.log('🖼️ Detected Portrait Wall Artwork');
@@ -1079,7 +1079,7 @@ STEP 2: Based on your detailed visual analysis above, create a comprehensive Ets
 
 CRITICAL: The listing MUST be based on the ACTUAL CONTENT you see in the image. Do not create generic content. If you see a Christmas scene, mention Christmas. If you see flowers, mention flowers. Be specific and accurate.
 
-IMPORTANT: This artwork will be sold as a DIGITAL DOWNLOAD for customers to ${artworkType === 'tv' ? 'display on Samsung Frame TV and other digital displays (16:9 aspect ratio)' : 'print at home or professionally (16x20" / 4:5 aspect ratio) or display digitally'}.
+IMPORTANT: This artwork will be sold as a DIGITAL DOWNLOAD for customers to ${artworkType === 'tv' ? 'display on Samsung Frame TV and other digital displays (16:9 aspect ratio)' : 'print at home or professionally (16x20" / 3:4 aspect ratio) or display digitally'}.
 
 Create an Etsy-optimized listing with:
 

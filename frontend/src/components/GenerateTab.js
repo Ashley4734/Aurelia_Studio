@@ -220,7 +220,7 @@ export default function GenerateTab() {
       setAspectRatio('16:9');
       setSize('big');
     } else if (type === 'wall') {
-      setAspectRatio('4:5');
+      setAspectRatio('3:4'); // Using 3:4 (closest valid ratio to 4:5 for 16x20" prints)
       setSize('big');
     }
   };
@@ -293,7 +293,7 @@ export default function GenerateTab() {
                 </h4>
                 <p className="text-sm text-slate-600 mb-2">For printing and wall display (16x20")</p>
                 <div className="flex items-center gap-2 text-xs text-slate-500">
-                  <span className="bg-slate-100 px-2 py-1 rounded">4:5 aspect ratio</span>
+                  <span className="bg-slate-100 px-2 py-1 rounded">3:4 aspect ratio</span>
                   <span className="bg-slate-100 px-2 py-1 rounded">2048px max</span>
                 </div>
               </div>
@@ -322,10 +322,9 @@ export default function GenerateTab() {
                 >
                   <option value="1:1">Square (1:1)</option>
                   <option value="16:9">TV Landscape (16:9)</option>
-                  <option value="4:5">Wall Portrait (4:5 / 16x20")</option>
+                  <option value="3:4">Wall Portrait (3:4 / Similar to 16x20")</option>
                   <option value="9:16">Portrait (9:16)</option>
                   <option value="4:3">Classic (4:3)</option>
-                  <option value="3:4">Portrait (3:4)</option>
                   <option value="21:9">Ultra-wide (21:9)</option>
                   <option value="3:2">Camera (3:2)</option>
                   <option value="2:3">Vertical (2:3)</option>
