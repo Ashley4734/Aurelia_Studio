@@ -1030,7 +1030,7 @@ app.post('/api/listing-from-image', upload.single('image'), async (req, res) => 
             'content-type': 'application/json'
           },
           body: JSON.stringify({
-            model: 'claude-3-5-sonnet-20240620',
+            model: 'claude-haiku-4-5',
             max_tokens: 4000,
             messages: [{
               role: 'user',
