@@ -1029,14 +1029,56 @@ app.post('/api/listing-from-image', upload.single('image'), async (req, res) => 
             'content-type': 'application/json'
           },
           body: JSON.stringify({
-            model: 'claude-3-haiku-20240307',
-            max_tokens: 1500,
+            model: 'claude-3-5-sonnet-20241022',
+            max_tokens: 2500,
             messages: [{
               role: 'user',
               content: [
                 {
                   type: 'text',
-                  text: 'Create a product listing for this artwork. Return only JSON: {"title":"...","story":"...","tags":["..."],"suggestedPrice":"12.99","shopSection":"Modern"}'
+                  text: `Analyze this digital artwork and create a comprehensive Etsy listing optimized for selling Frame TV art and digital downloads.
+
+IMPORTANT: This artwork will be sold as a DIGITAL DOWNLOAD for customers to display on Samsung Frame TV and other digital displays or print at home.
+
+Analyze the artwork for:
+- Style (modern, abstract, botanical, minimalist, geometric, nature, etc.)
+- Color palette and mood
+- Subject matter and themes
+- Target audience (home decor enthusiasts, Frame TV owners, interior designers, etc.)
+- Unique selling points
+
+Create an Etsy-optimized listing with:
+
+1. **title**: SEO-optimized title (max 140 characters). Must include "Frame TV Art" and "Digital Download". Example format: "[Style] [Subject] Wall Art, Frame TV Art Digital Download, [Additional Keywords]"
+
+2. **seoTitle**: Alternative SEO title variation for A/B testing
+
+3. **shortDescription**: Compelling 2-3 sentence hook focusing on benefits and what the customer gets
+
+4. **description**: Full product description (4-6 paragraphs) including:
+   - Eye-catching opening about the artwork
+   - What's included (file formats, sizes, resolution)
+   - How to use it (Frame TV, digital displays, printing)
+   - Benefits (instant download, high quality, versatile)
+   - Perfect for (room types, occasions, gift ideas)
+
+5. **tags**: Array of exactly 13 Etsy tags (mix of broad and long-tail keywords). Include: "frame tv art", "digital download", style-specific, color-related, and room/use-case tags
+
+6. **materials**: What the listing includes (e.g., "Digital file - JPG, PNG")
+
+7. **suggestedPrice**: Price in USD based on artwork complexity and market value (typically $4.99-$19.99 for digital art)
+
+8. **shopSection**: Category (e.g., "Modern Art", "Botanical Art", "Abstract Art")
+
+9. **keywords**: Array of 10-15 SEO keywords for search optimization
+
+10. **targetAudience**: Who would buy this (2-3 customer personas)
+
+11. **colors**: Main colors in the artwork (array of 3-5 color names)
+
+12. **style**: Primary style category
+
+Return ONLY valid JSON with all these fields. No markdown, no explanation, just the JSON object.`
                 },
                 {
                   type: 'image',
@@ -1056,8 +1098,9 @@ app.post('/api/listing-from-image', upload.single('image'), async (req, res) => 
           const text = result.content?.[0]?.text || '';
           const match = text.match(/\{[\s\S]*\}/);
           if (match) {
+            const listing = JSON.parse(match[0]);
             cleanup(file.path);
-            return res.json(JSON.parse(match[0]));
+            return res.json(listing);
           }
         }
       } catch (error) {
@@ -1065,16 +1108,74 @@ app.post('/api/listing-from-image', upload.single('image'), async (req, res) => 
       }
     }
 
-    const styles = ['Modern Abstract', 'Botanical', 'Minimalist', 'Contemporary'];
+    // Enhanced fallback with better Etsy-optimized templates
+    const styles = [
+      { name: 'Modern Abstract', tags: ['abstract art', 'modern art', 'contemporary art'], section: 'Abstract Art' },
+      { name: 'Botanical', tags: ['botanical art', 'plant art', 'nature art'], section: 'Botanical Art' },
+      { name: 'Minimalist', tags: ['minimalist art', 'simple art', 'scandinavian art'], section: 'Minimalist Art' },
+      { name: 'Geometric', tags: ['geometric art', 'modern geometric', 'pattern art'], section: 'Geometric Art' },
+      { name: 'Nature', tags: ['nature art', 'landscape art', 'scenic art'], section: 'Nature Art' }
+    ];
+
     const style = styles[Math.floor(Math.random() * styles.length)];
+    const price = (Math.floor(Math.random() * 10) + 5) + '.99';
+
     cleanup(file.path);
 
     res.json({
-      title: `${style} Digital Wall Art - Samsung Frame TV Art - Instant Download`,
-      story: `Beautiful ${style.toLowerCase()} artwork perfect for modern homes and digital displays.`,
-      tags: ['digital art', 'frame tv art', 'wall art', 'modern art', 'instant download'],
-      suggestedPrice: (Math.floor(Math.random() * 8) + 8) + '.99',
-      shopSection: style.includes('Botanical') ? 'Botanical' : 'Modern'
+      title: `${style.name} Wall Art Frame TV Art Digital Download Printable Modern Home Decor`,
+      seoTitle: `${style.name} Digital Art Print - Samsung Frame TV - Instant Download Wall Art`,
+      shortDescription: `Transform your space with this stunning ${style.name.toLowerCase()} digital artwork. Perfect for Frame TV, digital displays, or printing. Instant download, high-resolution files included.`,
+      description: `Beautiful ${style.name.toLowerCase()} artwork designed for modern living spaces and digital displays.
+
+WHAT'S INCLUDED:
+• High-resolution digital files (4K quality - 3840x2160px)
+• Multiple formats: JPG and PNG
+• Instant download - no shipping wait
+• Print-ready files for home printing
+• Perfect for Samsung Frame TV and other smart displays
+
+HOW TO USE:
+Simply download the files and display them on your Frame TV, upload to digital picture frames, or print at home or through a professional print service. The high-resolution 4K format ensures crisp, clear display on any screen size.
+
+PERFECT FOR:
+• Living rooms, bedrooms, offices, and entryways
+• Modern and contemporary home decor
+• Unique housewarming or holiday gifts
+• Interior designers and home stagers
+• Frame TV owners seeking beautiful artwork
+
+This is a DIGITAL DOWNLOAD only - no physical items will be shipped. Files are delivered instantly after purchase via Etsy's download system.`,
+      tags: [
+        'frame tv art',
+        'digital download',
+        'wall art',
+        'printable art',
+        ...style.tags,
+        'instant download',
+        'home decor',
+        'modern wall art',
+        '4k art',
+        'digital art print'
+      ].slice(0, 13),
+      materials: 'Digital file - High-resolution JPG and PNG (4K, 3840x2160px)',
+      suggestedPrice: price,
+      shopSection: style.section,
+      keywords: [
+        'frame tv art',
+        'samsung frame tv',
+        'digital download art',
+        'printable wall art',
+        style.name.toLowerCase() + ' art',
+        'instant download',
+        'home decor',
+        'wall art digital',
+        '4k artwork',
+        'modern home decor'
+      ],
+      targetAudience: 'Frame TV owners, home decor enthusiasts, renters seeking damage-free decor',
+      colors: ['Multi-color'],
+      style: style.name
     });
   } catch (error) {
     cleanup(req.file?.path);
