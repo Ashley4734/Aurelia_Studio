@@ -147,12 +147,24 @@ export default function GenerateTab() {
 
   const downloadImage = async (imageUrl, prompt, index) => {
     try {
-      const response = await fetch(imageUrl);
-      const blob = await response.blob();
-
       // Create filename from prompt (sanitized) or use index
       const sanitizedPrompt = prompt.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').substring(0, 50);
       const filename = `generated_${sanitizedPrompt || `image_${index + 1}`}_${Date.now()}.jpg`;
+
+      toast.loading('Processing image with 300 DPI...', { id: 'download' });
+
+      // Use our backend proxy to add 300 DPI metadata
+      const response = await fetch('/api/download-with-dpi', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrl, filename })
+      });
+
+      if (!response.ok) {
+        throw new Error('Download processing failed');
+      }
+
+      const blob = await response.blob();
 
       // Create download link
       const url = URL.createObjectURL(blob);
@@ -164,10 +176,10 @@ export default function GenerateTab() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      toast.success('Image downloaded successfully!');
+      toast.success('Image downloaded with 300 DPI!', { id: 'download' });
     } catch (error) {
       console.error('Download failed:', error);
-      toast.error('Failed to download image');
+      toast.error('Failed to download image', { id: 'download' });
     }
   };
 
@@ -175,20 +187,27 @@ export default function GenerateTab() {
     if (results.length === 0) return;
 
     try {
-      toast.loading('Preparing download...', { id: 'download-all' });
+      toast.loading('Processing and downloading images with 300 DPI...', { id: 'download-all' });
 
-      // Import JSZip dynamically (if available) or create a simple solution
+      // Process each image through our DPI proxy
       const imageBlobs = await Promise.all(
         results.map(async (result, index) => {
-          const response = await fetch(result.imageUrl);
-          const blob = await response.blob();
           const sanitizedPrompt = result.prompt.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').substring(0, 30);
           const filename = `${sanitizedPrompt || `image_${index + 1}`}.jpg`;
+
+          // Use our backend proxy to add 300 DPI metadata
+          const response = await fetch('/api/download-with-dpi', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ imageUrl: result.imageUrl, filename })
+          });
+
+          const blob = await response.blob();
           return { blob, filename };
         })
       );
 
-      // For now, create individual downloads (can be enhanced with ZIP later)
+      // Create individual downloads
       for (let i = 0; i < imageBlobs.length; i++) {
         const { blob, filename } = imageBlobs[i];
         const url = URL.createObjectURL(blob);
@@ -206,7 +225,7 @@ export default function GenerateTab() {
         }
       }
 
-      toast.success(`Downloaded ${results.length} images!`, { id: 'download-all' });
+      toast.success(`Downloaded ${results.length} images with 300 DPI!`, { id: 'download-all' });
     } catch (error) {
       console.error('Batch download failed:', error);
       toast.error('Failed to download images', { id: 'download-all' });
