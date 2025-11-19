@@ -10,10 +10,9 @@ Professional digital art workflow platform for mockups, packaging, generation, a
   - Mockup library management
   - ZIP export functionality
 
-- **Package**: Create print-ready packages
-  - 4K display versions
-  - Multiple print sizes (24x32", 16x20")
-  - 300 DPI for professional printing
+- **Package**: Create digital art packages for Frame TV
+  - High-resolution 4K display versions (3840 × 2160 px, 16:9 ratio)
+  - Perfectly sized for The Frame TV and other 4K displays
   - Installation guides included
 
 - **Generate**: AI-powered art creation using SeedreamS-3

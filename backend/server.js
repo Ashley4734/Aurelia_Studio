@@ -762,8 +762,6 @@ app.post('/api/package-artwork', upload.single('image'), async (req, res) => {
     const baseName = safeFilename(path.parse(req.file.originalname).name);
 
     const fourK = await sharp(filePath).resize(3840, 2160, { fit: 'cover' }).png().toBuffer();
-    const large = await sharp(filePath).resize(7200, 9600, { fit: 'cover' }).jpeg({ quality: 95 }).toBuffer();
-    const medium = await sharp(filePath).resize(4800, 6000, { fit: 'cover' }).jpeg({ quality: 95 }).toBuffer();
 
     const doc = new jsPDF();
     doc.setFillColor(59, 130, 246);
@@ -775,22 +773,35 @@ app.post('/api/package-artwork', upload.single('image'), async (req, res) => {
     doc.text(`Installation Guide - ${baseName}`, 105, 30, { align: 'center' });
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(14);
-    doc.text('Package Contents:', 20, 60);
+    doc.text("What's Included:", 20, 60);
     doc.setFontSize(11);
-    doc.text(`• 4K Display: ${baseName}_4K.png`, 20, 75);
-    doc.text(`• Large Print: ${baseName}_24x32.jpg (300 DPI)`, 20, 85);
-    doc.text(`• Medium Print: ${baseName}_16x20.jpg (300 DPI)`, 20, 95);
-    doc.text('Samsung Frame TV Setup:', 20, 115);
-    doc.text('1. Transfer PNG via USB or SmartThings app', 20, 125);
-    doc.text('2. Navigate to Art Mode and select image', 20, 135);
-    doc.text('3. Adjust mat and brightness settings', 20, 145);
+    doc.text(`• 1 High-Resolution JPG file - ${baseName}_4K.png (3840 x 2160 px, 16:9 ratio)`, 20, 75);
+    doc.text('  Perfectly sized for The Frame TV and other 4K displays', 25, 83);
+
+    doc.setFontSize(14);
+    doc.text('How to Download Your Files:', 20, 100);
+    doc.setFontSize(11);
+    doc.text('If signed in to Etsy:', 20, 112);
+    doc.text('1. Go to your Etsy account > Purchases and Reviews', 25, 120);
+    doc.text('2. Find your order and click Download Files', 25, 128);
+    doc.text('If you purchased as a guest:', 20, 143);
+    doc.text('1. Check your order confirmation email from Etsy', 25, 151);
+    doc.text('2. Click the download link in that email to access your files', 25, 159);
+
+    doc.setFontSize(14);
+    doc.text('How to Display on The Frame TV:', 20, 176);
+    doc.setFontSize(11);
+    doc.text('1. Open the SmartThings app and go to Devices > "Add Device" or press "+"', 25, 188);
+    doc.text('   > "Add device"', 25, 196);
+    doc.text('2. Connect your TV (scan for nearby devices for easiest setup)', 25, 204);
+    doc.text('3. Once connected, select Art Mode', 25, 212);
+    doc.text('4. Tap Add Your Photos (+) > choose the image > Save on The Frame', 25, 220);
+    doc.text('5. To make a slideshow, select Slideshow when viewing your chosen photos', 25, 228);
 
     const pdfBuffer = Buffer.from(doc.output('arraybuffer'));
 
     const zip = new JSZip();
     zip.file(`${baseName}_4K.png`, fourK);
-    zip.file(`${baseName}_24x32.jpg`, large);
-    zip.file(`${baseName}_16x20.jpg`, medium);
     zip.file(`Installation_Guide_${baseName}.pdf`, pdfBuffer);
 
     const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' });
