@@ -1012,6 +1012,7 @@ app.post('/api/listing-from-image', upload.single('image'), async (req, res) => 
     const key = process.env.ANTHROPIC_API_KEY;
 
     if (key?.startsWith('sk-ant-')) {
+      console.log('🔍 Using Claude API for image analysis...');
       try {
         let buffer = fs.readFileSync(file.path);
         if (fs.statSync(file.path).size > 5 * 1024 * 1024) {
@@ -1030,55 +1031,58 @@ app.post('/api/listing-from-image', upload.single('image'), async (req, res) => 
           },
           body: JSON.stringify({
             model: 'claude-3-5-sonnet-20241022',
-            max_tokens: 2500,
+            max_tokens: 4000,
             messages: [{
               role: 'user',
               content: [
                 {
                   type: 'text',
-                  text: `Analyze this digital artwork and create a comprehensive Etsy listing optimized for selling Frame TV art and digital downloads.
+                  text: `STEP 1: First, carefully examine the image I'm providing and describe in detail what you see:
+- What is the main subject or scene depicted?
+- What style is it (abstract, realistic, minimalist, etc.)?
+- What colors are dominant?
+- What mood or feeling does it convey?
+- What elements, objects, or themes are present?
+- Is it seasonal (Christmas, Halloween, etc.) or thematic?
+
+STEP 2: Based on your detailed visual analysis above, create a comprehensive Etsy listing optimized for selling this specific artwork as Frame TV art and digital downloads.
+
+CRITICAL: The listing MUST be based on the ACTUAL CONTENT you see in the image. Do not create generic content. If you see a Christmas scene, mention Christmas. If you see flowers, mention flowers. Be specific and accurate.
 
 IMPORTANT: This artwork will be sold as a DIGITAL DOWNLOAD for customers to display on Samsung Frame TV and other digital displays or print at home.
 
-Analyze the artwork for:
-- Style (modern, abstract, botanical, minimalist, geometric, nature, etc.)
-- Color palette and mood
-- Subject matter and themes
-- Target audience (home decor enthusiasts, Frame TV owners, interior designers, etc.)
-- Unique selling points
-
 Create an Etsy-optimized listing with:
 
-1. **title**: SEO-optimized title (max 140 characters). Must include "Frame TV Art" and "Digital Download". Example format: "[Style] [Subject] Wall Art, Frame TV Art Digital Download, [Additional Keywords]"
+1. **title**: SEO-optimized title (max 140 characters) that describes what's actually in the image. Must include "Frame TV Art" and "Digital Download". Example: "Christmas Winter Scene Frame TV Art Digital Download Festive Holiday Wall Decor"
 
-2. **seoTitle**: Alternative SEO title variation for A/B testing
+2. **seoTitle**: Alternative SEO title variation based on the actual image content
 
-3. **shortDescription**: Compelling 2-3 sentence hook focusing on benefits and what the customer gets
+3. **shortDescription**: Compelling 2-3 sentence description of what the customer sees in THIS specific artwork and its benefits
 
 4. **description**: Full product description (4-6 paragraphs) including:
-   - Eye-catching opening about the artwork
+   - Eye-catching opening describing THIS SPECIFIC artwork and what it shows
    - What's included (file formats, sizes, resolution)
    - How to use it (Frame TV, digital displays, printing)
    - Benefits (instant download, high quality, versatile)
-   - Perfect for (room types, occasions, gift ideas)
+   - Perfect for (specific rooms, occasions based on the image theme, gift ideas)
 
-5. **tags**: Array of exactly 13 Etsy tags (mix of broad and long-tail keywords). Include: "frame tv art", "digital download", style-specific, color-related, and room/use-case tags
+5. **tags**: Array of exactly 13 Etsy tags based on what's ACTUALLY in the image. Include: "frame tv art", "digital download", and 11 tags describing the actual content, style, colors, and theme
 
 6. **materials**: What the listing includes (e.g., "Digital file - JPG, PNG")
 
 7. **suggestedPrice**: Price in USD based on artwork complexity and market value (typically $4.99-$19.99 for digital art)
 
-8. **shopSection**: Category (e.g., "Modern Art", "Botanical Art", "Abstract Art")
+8. **shopSection**: Category based on actual content (e.g., "Christmas Art", "Botanical Art", "Abstract Art", "Seasonal Art")
 
-9. **keywords**: Array of 10-15 SEO keywords for search optimization
+9. **keywords**: Array of 10-15 SEO keywords that describe the ACTUAL image content
 
-10. **targetAudience**: Who would buy this (2-3 customer personas)
+10. **targetAudience**: Who would buy THIS specific artwork (2-3 customer personas based on the theme)
 
-11. **colors**: Main colors in the artwork (array of 3-5 color names)
+11. **colors**: Main colors ACTUALLY visible in the artwork (array of 3-5 specific color names)
 
-12. **style**: Primary style category
+12. **style**: Primary style category that matches what you see
 
-Return ONLY valid JSON with all these fields. No markdown, no explanation, just the JSON object.`
+Return ONLY valid JSON with all these fields. No markdown, no explanation, just the JSON object. ENSURE all content is based on what you ACTUALLY SEE in the image.`
                 },
                 {
                   type: 'image',
@@ -1095,16 +1099,25 @@ Return ONLY valid JSON with all these fields. No markdown, no explanation, just 
 
         if (response.ok) {
           const result = await response.json();
+          console.log('✅ Claude API response received');
           const text = result.content?.[0]?.text || '';
+          console.log('📝 Response text length:', text.length);
           const match = text.match(/\{[\s\S]*\}/);
           if (match) {
             const listing = JSON.parse(match[0]);
+            console.log('✅ Successfully parsed listing from Claude response');
             cleanup(file.path);
             return res.json(listing);
+          } else {
+            console.error('❌ No JSON found in Claude response. Response:', text.substring(0, 500));
           }
+        } else {
+          const errorBody = await response.text();
+          console.error('❌ Claude API request failed:', response.status, errorBody);
         }
       } catch (error) {
-        console.error('Claude API error:', error);
+        console.error('❌ Claude API error:', error.message);
+        console.error('Error details:', error);
       }
     }
 
