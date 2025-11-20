@@ -35,7 +35,7 @@ FROM node:18-alpine
 RUN apk add --no-cache \
     python3 python3-dev py3-pip \
     build-base jpeg-dev zlib-dev libffi-dev \
-    vips-dev curl
+    vips-dev curl su-exec
 
 # Create Python virtual environment
 ENV VIRTUAL_ENV=/opt/venv
@@ -60,18 +60,18 @@ COPY backend/server.js ./
 # Copy frontend build from builder stage
 COPY --from=frontend-builder /app/frontend/build /app/build
 
-# Create data directory with proper permissions
-RUN mkdir -p /data/uploads /data/mockups /data/output /data/temp && \
-    addgroup -g 1001 -S nodejs && \
+# Create user and group
+RUN addgroup -g 1001 -S nodejs && \
     adduser -S aurelia -u 1001 -G nodejs && \
-    chown -R aurelia:nodejs /app /data
+    chown -R aurelia:nodejs /app
+
+# Copy and set up entrypoint script
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
   CMD curl -f http://localhost:3000/api/health || exit 1
-
-# Switch to non-root user
-USER aurelia
 
 # Environment defaults
 ENV NODE_ENV=production
@@ -81,5 +81,6 @@ ENV DATA_DIR=/data
 # Expose port
 EXPOSE 3000
 
-# Start command
+# Use entrypoint to handle permissions, then start the app
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["node", "server.js"]
