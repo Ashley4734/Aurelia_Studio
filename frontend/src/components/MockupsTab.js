@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useDropzone } from 'react-dropzone';
 import toast from 'react-hot-toast';
-import { Upload, Package, Zap, Download, Eye, FileImage, Trash2, Grid } from 'lucide-react';
+import { Upload, Package, Zap, Download, Eye, FileImage, Trash2, Grid, Search, Calendar, HardDrive, Image as ImageIcon } from 'lucide-react';
 
 export default function MockupsTab() {
   const [mockups, setMockups] = useState([]);
@@ -12,6 +12,7 @@ export default function MockupsTab() {
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentProcessing, setCurrentProcessing] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     loadSavedMockups();
@@ -90,6 +91,47 @@ export default function MockupsTab() {
       toast.error('Failed to load from library');
     }
   };
+
+  const deleteMockup = async (id, name) => {
+    if (!window.confirm(`Are you sure you want to delete "${name}"?`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/mockup/${id}`, {
+        method: 'DELETE'
+      });
+
+      if (response.ok) {
+        toast.success('Mockup deleted successfully');
+        await loadSavedMockups();
+      } else {
+        throw new Error('Delete failed');
+      }
+    } catch (error) {
+      toast.error('Failed to delete mockup');
+    }
+  };
+
+  const formatFileSize = (bytes) => {
+    if (!bytes) return 'Unknown';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
+
+  const formatDate = (date) => {
+    if (!date) return 'Unknown';
+    return new Date(date).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  };
+
+  const filteredMockups = savedMockups.filter(mockup =>
+    mockup.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   const processAllMockups = async () => {
     if (artworks.length === 0 || mockups.length === 0) {
@@ -303,19 +345,109 @@ export default function MockupsTab() {
       {/* Library Section */}
       {savedMockups.length > 0 && (
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="glass rounded-3xl p-6 border border-white/20">
-          <h3 className="text-xl font-semibold text-slate-800 mb-4 flex items-center gap-2">
-            <Package className="w-5 h-5 text-green-500" />
-            Mockup Library
-          </h3>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-            {savedMockups.map((mockup) => (
-              <motion.button key={mockup.id} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => loadFromLibrary([mockup.id])} className="bg-white/70 hover:bg-white rounded-xl p-3 text-center transition-all border border-white/50 hover:shadow-md">
-                <FileImage className="w-6 h-6 text-slate-500 mx-auto mb-2" />
-                <span className="text-xs text-slate-600 block truncate">{mockup.name}</span>
-              </motion.button>
-            ))}
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-semibold text-slate-800 flex items-center gap-2">
+              <Package className="w-5 h-5 text-green-500" />
+              Mockup Library
+              <span className="text-sm bg-green-100 text-green-700 px-2 py-1 rounded-full">{savedMockups.length}</span>
+            </h3>
           </div>
+
+          {/* Search Bar */}
+          {savedMockups.length > 3 && (
+            <div className="mb-4">
+              <div className="relative">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search mockups..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 bg-white/70 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 transition-all"
+                />
+              </div>
+            </div>
+          )}
+
+          {filteredMockups.length === 0 ? (
+            <div className="text-center py-8 text-slate-500">
+              <Search className="w-8 h-8 mx-auto mb-2 opacity-50" />
+              <p className="text-sm">No mockups found matching "{searchQuery}"</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {filteredMockups.map((mockup) => (
+                <motion.div
+                  key={mockup.id}
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="bg-white/70 rounded-xl overflow-hidden border border-white/50 hover:shadow-lg transition-all group"
+                >
+                  {/* Thumbnail */}
+                  <div
+                    className="aspect-video bg-gradient-to-br from-slate-100 to-slate-200 relative cursor-pointer"
+                    onClick={() => loadFromLibrary([mockup.id])}
+                  >
+                    {mockup.hasThumbnail ? (
+                      <img
+                        src={`/api/mockup/${mockup.id}/thumbnail`}
+                        alt={mockup.name}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <FileImage className="w-12 h-12 text-slate-400" />
+                      </div>
+                    )}
+
+                    {/* Hover Overlay */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-3">
+                      <span className="text-white text-xs font-medium">Click to load</span>
+                    </div>
+                  </div>
+
+                  {/* Info Section */}
+                  <div className="p-3">
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <h4 className="text-sm font-medium text-slate-700 truncate flex-1" title={mockup.name}>
+                        {mockup.name}
+                      </h4>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteMockup(mockup.id, mockup.name);
+                        }}
+                        className="text-red-400 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100"
+                        title="Delete mockup"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {/* Metadata */}
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                        <HardDrive className="w-3 h-3" />
+                        <span>{formatFileSize(mockup.size)}</span>
+                      </div>
+
+                      {mockup.dimensions && (
+                        <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                          <ImageIcon className="w-3 h-3" />
+                          <span>{mockup.dimensions.width} × {mockup.dimensions.height}</span>
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                        <Calendar className="w-3 h-3" />
+                        <span>{formatDate(mockup.dateAdded)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
         </motion.div>
       )}
 

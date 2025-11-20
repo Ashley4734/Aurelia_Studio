@@ -21,6 +21,7 @@ const DATA_DIR = process.env.DATA_DIR || '/data';
 const DIRS = {
   uploads: path.join(DATA_DIR, 'uploads'),
   mockups: path.join(DATA_DIR, 'mockups'),
+  thumbnails: path.join(DATA_DIR, 'thumbnails'),
   output: path.join(DATA_DIR, 'output'),
   temp: path.join(DATA_DIR, 'temp')
 };
@@ -59,6 +60,24 @@ const cleanup = (filePath) => {
     }
   } catch (error) {
     console.error('Cleanup error:', error);
+  }
+};
+
+// Generate thumbnail for mockup file
+const generateThumbnail = async (filePath, id) => {
+  try {
+    const thumbnailPath = path.join(DIRS.thumbnails, `${id}.jpg`);
+
+    // Try to generate thumbnail using Sharp
+    await sharp(filePath)
+      .resize(200, 200, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 1 } })
+      .jpeg({ quality: 85 })
+      .toFile(thumbnailPath);
+
+    return thumbnailPath;
+  } catch (error) {
+    console.error('Thumbnail generation error:', error);
+    return null;
   }
 };
 
@@ -608,21 +627,57 @@ const sharpFallbackProcessor = async (mockupData, artworkData, filename) => {
   }
 };
 
-app.get('/api/mockups', (req, res) => {
+app.get('/api/mockups', async (req, res) => {
   try {
     const files = fs.readdirSync(DIRS.mockups)
-      .filter(f => f.includes('__'))
-      .map(f => {
+      .filter(f => f.includes('__'));
+
+    const mockupsWithMetadata = await Promise.all(
+      files.map(async (f) => {
         const [id, ...nameParts] = f.split('__');
-        return { id, name: nameParts.join('__'), filename: f };
-      });
-    res.json(files);
+        const name = nameParts.join('__');
+        const filePath = path.join(DIRS.mockups, f);
+        const thumbnailPath = path.join(DIRS.thumbnails, `${id}.jpg`);
+
+        try {
+          const stats = fs.statSync(filePath);
+          const hasThumbnail = fs.existsSync(thumbnailPath);
+
+          // Try to get image dimensions
+          let dimensions = null;
+          try {
+            const metadata = await sharp(filePath).metadata();
+            dimensions = {
+              width: metadata.width,
+              height: metadata.height
+            };
+          } catch (e) {
+            // If sharp fails (e.g., for PSD), dimensions will be null
+          }
+
+          return {
+            id,
+            name,
+            filename: f,
+            size: stats.size,
+            dateAdded: stats.birthtime || stats.ctime,
+            dimensions,
+            hasThumbnail
+          };
+        } catch (error) {
+          console.error(`Error getting metadata for ${f}:`, error);
+          return { id, name, filename: f, size: 0, dateAdded: null, dimensions: null, hasThumbnail: false };
+        }
+      })
+    );
+
+    res.json(mockupsWithMetadata);
   } catch (error) {
     res.status(500).json({ error: 'Failed to read mockups directory' });
   }
 });
 
-app.post('/api/save-mockups', upload.array('mockups', 20), (req, res) => {
+app.post('/api/save-mockups', upload.array('mockups', 20), async (req, res) => {
   try {
     const saved = [];
     for (const file of req.files || []) {
@@ -630,11 +685,16 @@ app.post('/api/save-mockups', upload.array('mockups', 20), (req, res) => {
       const name = safeFilename(file.originalname);
       const target = path.join(DIRS.mockups, `${id}__${name}`);
       fs.copyFileSync(file.path, target);
+
+      // Generate thumbnail
+      await generateThumbnail(file.path, id);
+
       cleanup(file.path);
       saved.push({ id, name });
     }
     res.json({ success: true, saved });
   } catch (error) {
+    console.error('Save mockups error:', error);
     res.status(500).json({ error: 'Save failed' });
   }
 });
@@ -647,6 +707,52 @@ app.get('/api/mockup/:id', (req, res) => {
     res.sendFile(path.join(DIRS.mockups, file));
   } catch (error) {
     res.status(500).json({ error: 'Retrieval failed' });
+  }
+});
+
+// Get mockup thumbnail
+app.get('/api/mockup/:id/thumbnail', (req, res) => {
+  try {
+    const thumbnailPath = path.join(DIRS.thumbnails, `${req.params.id}.jpg`);
+    if (!fs.existsSync(thumbnailPath)) {
+      return res.status(404).json({ error: 'Thumbnail not found' });
+    }
+    res.sendFile(thumbnailPath);
+  } catch (error) {
+    res.status(500).json({ error: 'Thumbnail retrieval failed' });
+  }
+});
+
+// Delete mockup
+app.delete('/api/mockup/:id', (req, res) => {
+  try {
+    const id = req.params.id;
+
+    // Find and delete the mockup file
+    const mockupFile = fs.readdirSync(DIRS.mockups)
+      .find(f => f.startsWith(`${id}__`));
+
+    if (!mockupFile) {
+      return res.status(404).json({ error: 'Mockup not found' });
+    }
+
+    const mockupPath = path.join(DIRS.mockups, mockupFile);
+    const thumbnailPath = path.join(DIRS.thumbnails, `${id}.jpg`);
+
+    // Delete mockup file
+    if (fs.existsSync(mockupPath)) {
+      fs.unlinkSync(mockupPath);
+    }
+
+    // Delete thumbnail if exists
+    if (fs.existsSync(thumbnailPath)) {
+      fs.unlinkSync(thumbnailPath);
+    }
+
+    res.json({ success: true, message: 'Mockup deleted successfully' });
+  } catch (error) {
+    console.error('Delete mockup error:', error);
+    res.status(500).json({ error: 'Delete failed' });
   }
 });
 
