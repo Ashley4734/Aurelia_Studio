@@ -71,7 +71,19 @@ ANTHROPIC_API_KEY=your_anthropic_key_here
 PORT=3000
 DATA_DIR=/data
 NODE_ENV=production
+# Required for secured API access
+API_KEY=choose_a_strong_key
 ```
+
+### API hardening
+
+All `/api/*` routes require an API key. Set `API_KEY` on the server and include it on every request via the `x-api-key` header or a `Bearer` token. Requests missing or using the wrong key are rejected before any route handlers run, ensuring that even CORS-preflighted calls are protected.
+
+Simple, in-memory rate limiting now guards the platform (default 120 requests / 15 minutes per client) with tighter buckets on heavy routes such as PSD processing and AI generation. JSON bodies are capped at 10 MB and uploads at 25 MB to avoid oversized payloads.
+
+### PSD processor
+
+The inline Python script was promoted into a versioned module at `backend/psd_processor/main.py`. It validates input, enforces a hard timeout via signals, and falls back to an image compositor when `psd-tools` is unavailable. Logging is emitted to stdout for easier observability.
 
 ### Installation
 
