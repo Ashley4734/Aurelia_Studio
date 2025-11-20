@@ -82,6 +82,72 @@ const cleanup = (filePath) => {
 };
 
 // Generate thumbnail for mockup file
+// Extract composite image from PSD file for thumbnail generation
+const extractPSDComposite = async (psdPath) => {
+  return new Promise((resolve, reject) => {
+    const pythonScript = `
+import sys
+import io
+from PIL import Image
+
+try:
+    from psd_tools import PSDImage
+except ImportError:
+    sys.stderr.write("psd-tools not available\\n")
+    sys.exit(1)
+
+try:
+    # Read PSD file path from stdin
+    psd_path = sys.stdin.read().strip()
+
+    # Open PSD and extract composite
+    psd = PSDImage.open(psd_path)
+    composite = psd.composite()
+
+    # Convert to RGB (remove alpha for thumbnail)
+    if composite.mode in ('RGBA', 'LA'):
+        # Create white background
+        background = Image.new('RGB', composite.size, (255, 255, 255))
+        if composite.mode == 'RGBA':
+            background.paste(composite, mask=composite.split()[3])
+        else:
+            background.paste(composite)
+        composite = background
+    elif composite.mode != 'RGB':
+        composite = composite.convert('RGB')
+
+    # Write to stdout as PNG
+    buffer = io.BytesIO()
+    composite.save(buffer, format='PNG')
+    sys.stdout.buffer.write(buffer.getvalue())
+
+except Exception as e:
+    sys.stderr.write(f"Error: {str(e)}\\n")
+    sys.exit(1)
+`;
+
+    const python = spawn('python3', ['-c', pythonScript]);
+    const chunks = [];
+
+    python.stdin.write(psdPath);
+    python.stdin.end();
+
+    python.stdout.on('data', (data) => chunks.push(data));
+
+    python.stderr.on('data', (data) => {
+      console.error(`PSD extraction error: ${data.toString()}`);
+    });
+
+    python.on('close', (code) => {
+      if (code === 0 && chunks.length > 0) {
+        resolve(Buffer.concat(chunks));
+      } else {
+        reject(new Error(`PSD extraction failed with code ${code}`));
+      }
+    });
+  });
+};
+
 const generateThumbnail = async (filePath, id) => {
   // Skip thumbnail generation if sharp is not available
   if (!sharp) {
@@ -91,8 +157,31 @@ const generateThumbnail = async (filePath, id) => {
 
   try {
     const thumbnailPath = path.join(DIRS.thumbnails, `${id}.jpg`);
+    const ext = path.extname(filePath).toLowerCase();
 
-    // Try to generate thumbnail using Sharp
+    // Handle PSD files specially - extract composite first
+    if (ext === '.psd') {
+      console.log(`Extracting composite from PSD for thumbnail: ${id}`);
+
+      try {
+        const compositeBuffer = await extractPSDComposite(filePath);
+
+        // Generate thumbnail from composite buffer
+        await sharp(compositeBuffer)
+          .resize(200, 200, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 1 } })
+          .jpeg({ quality: 85 })
+          .toFile(thumbnailPath);
+
+        console.log(`✓ Generated thumbnail for PSD: ${id}`);
+        return thumbnailPath;
+      } catch (psdError) {
+        console.error(`✗ PSD thumbnail generation failed for ${id}:`, psdError.message);
+        console.log(`  Falling back to default placeholder`);
+        return null;
+      }
+    }
+
+    // For non-PSD files, use Sharp directly
     await sharp(filePath)
       .resize(200, 200, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 1 } })
       .jpeg({ quality: 85 })
@@ -747,6 +836,35 @@ app.get('/api/mockup/:id/thumbnail', (req, res) => {
     res.sendFile(thumbnailPath);
   } catch (error) {
     res.status(500).json({ error: 'Thumbnail retrieval failed' });
+  }
+});
+
+// Regenerate thumbnail for a mockup (useful for existing PSD files)
+app.post('/api/mockup/:id/regenerate-thumbnail', async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    // Find the mockup file
+    const mockupFile = fs.readdirSync(DIRS.mockups)
+      .find(f => f.startsWith(`${id}__`));
+
+    if (!mockupFile) {
+      return res.status(404).json({ error: 'Mockup not found' });
+    }
+
+    const mockupPath = path.join(DIRS.mockups, mockupFile);
+
+    // Generate thumbnail
+    const thumbnailPath = await generateThumbnail(mockupPath, id);
+
+    if (thumbnailPath) {
+      res.json({ success: true, message: 'Thumbnail regenerated successfully' });
+    } else {
+      res.status(500).json({ error: 'Thumbnail generation failed' });
+    }
+  } catch (error) {
+    console.error('Regenerate thumbnail error:', error);
+    res.status(500).json({ error: 'Thumbnail regeneration failed' });
   }
 });
 
