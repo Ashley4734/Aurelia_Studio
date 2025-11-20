@@ -16,9 +16,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
-const API_KEY = process.env.API_KEY;
-const RATE_LIMIT_WINDOW = 15 * 60 * 1000;
-const RATE_LIMIT_MAX = 120;
 
 const DATA_DIR = process.env.DATA_DIR || '/data';
 const DIRS = {
@@ -36,65 +33,16 @@ Object.values(DIRS).forEach(dir => {
   }
 });
 
-const allowedOrigins = (process.env.CORS_ORIGINS || '*').split(',').map(o => o.trim()).filter(Boolean);
-app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
-      return callback(null, origin || '*');
-    }
-    return callback(new Error('Not allowed by CORS'));
-  },
-  credentials: true
-}));
-
-app.use(express.json({ limit: '10mb' }));
+app.use(cors());
+app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'build')));
-
-const rateBuckets = new Map();
-const rateLimit = (max = RATE_LIMIT_MAX, windowMs = RATE_LIMIT_WINDOW) => (req, res, next) => {
-  const key = req.headers['x-forwarded-for'] || req.ip || 'global';
-  const now = Date.now();
-  const bucket = rateBuckets.get(key) || { count: 0, start: now };
-
-  if (now - bucket.start > windowMs) {
-    bucket.count = 0;
-    bucket.start = now;
-  }
-
-  bucket.count += 1;
-  rateBuckets.set(key, bucket);
-
-  if (bucket.count > max) {
-    return res.status(429).json({ error: 'Rate limit exceeded. Please slow down.' });
-  }
-
-  next();
-};
-
-const heavyProcessLimiter = rateLimit(40, 30 * 60 * 1000);
-const burstLimiter = rateLimit(10, 5 * 60 * 1000);
-
-const authenticate = (req, res, next) => {
-  if (!API_KEY) {
-    return res.status(500).json({ error: 'Server authentication key not configured' });
-  }
-
-  const headerKey = req.headers['x-api-key'] || (req.headers.authorization || '').replace('Bearer ', '');
-  if (headerKey !== API_KEY) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-
-  next();
-};
-
-app.use('/api', authenticate, rateLimit());
 
 const upload = multer({
   storage: multer.diskStorage({
     destination: (req, file, cb) => cb(null, DIRS.uploads),
     filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`)
   }),
-  limits: { fileSize: 25 * 1024 * 1024 }
+  limits: { fileSize: 50 * 1024 * 1024 }
 });
 
 const safeFilename = (name) => {
@@ -114,12 +62,414 @@ const cleanup = (filePath) => {
   }
 };
 
-// PSD processor module wrapper
+// ENHANCED Python PSD processor script with YOUR WORKING LOGIC
 const createPSDProcessor = () => {
-  const scriptPath = path.join(__dirname, 'psd_processor', 'main.py');
-  if (!fs.existsSync(scriptPath)) {
-    throw new Error('PSD processor module is missing');
-  }
+  const pythonScript = `
+import sys
+import json
+import base64
+import logging
+import traceback
+from PIL import Image, ImageOps
+import io
+import os
+
+# Configure logging to match the working version
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+try:
+    from psd_tools import PSDImage
+    PSD_TOOLS_AVAILABLE = True
+    logger.info("✅ psd-tools available")
+except ImportError:
+    PSD_TOOLS_AVAILABLE = False
+    logger.warning("⚠️ psd-tools not available")
+
+def safe_base64_decode(data):
+    """Safely decode base64 data, handling data URLs"""
+    try:
+        if ',' in data:
+            data = data.split(',')[1]
+        return base64.b64decode(data)
+    except Exception as e:
+        raise ValueError(f"Base64 decode failed: {str(e)}")
+
+def process_with_enhanced_psd_tools(psd_data, artwork_data, filename):
+    """Enhanced PSD processing with WORKING LOGIC from your version"""
+    if not PSD_TOOLS_AVAILABLE:
+        raise ImportError("psd-tools not available")
+
+    try:
+        logger.info(f"🔍 Processing PSD: {filename}")
+
+        # Load PSD - EXACTLY like your working version
+        psd = PSDImage.open(io.BytesIO(psd_data))
+        logger.info(f"✅ PSD opened successfully. Size: {psd.width}x{psd.height}, Layers: {len(psd)}")
+
+        # Load artwork - with YOUR working mode handling
+        artwork = Image.open(io.BytesIO(artwork_data))
+        if artwork.mode in ('RGBA', 'LA', 'P'):
+            # Keep RGBA if available for transparency, otherwise convert to RGB
+            if artwork.mode == 'P' and 'transparency' in artwork.info:
+                artwork = artwork.convert('RGBA')
+            elif artwork.mode in ('RGBA', 'LA'):
+                pass  # Keep as is
+            else:
+                artwork = artwork.convert('RGB')
+        logger.info(f"📷 Artwork loaded: {artwork.size}, Mode: {artwork.mode}")
+
+        # Enhanced smart object detection - USING YOUR WORKING APPROACH
+        smart_layer = None
+        smart_bounds = None
+        detection_method = "none"
+
+        def find_smart_objects(group, path=""):
+            """ENHANCED smart object detection - BASED ON YOUR WORKING VERSION"""
+            nonlocal smart_layer, smart_bounds, detection_method
+
+            for layer in group:
+                layer_path = f"{path}/{layer.name}" if path else layer.name
+                logger.info(f"🔍 Checking layer: {layer_path}")
+
+                # Skip invisible layers for efficiency
+                if hasattr(layer, 'visible') and not layer.visible:
+                    logger.info(f"  ⏭️ Skipping invisible layer: {layer.name}")
+                    continue
+
+                # METHOD 1: Name-based detection (HIGHEST PRIORITY - YOUR WORKING METHOD)
+                target_names = [
+                    'design', 'artwork', 'logo', 'mockup', 'replace', 'smart object',
+                    'your design', 'add design', 'place design', 'design here',
+                    'insert', 'content', 'image', 'photo', 'graphic', 'placeholder',
+                    'your artwork', 'add artwork', 'place artwork', 'artwork here',
+                    'your logo', 'add logo', 'place logo', 'logo here'
+                ]
+
+                layer_name_lower = layer.name.lower().strip()
+
+                for target in target_names:
+                    if target in layer_name_lower:
+                        logger.info(f"✅ FOUND TARGET LAYER by name match: '{layer.name}' contains '{target}'")
+                        smart_layer = layer
+                        smart_bounds = (layer.left, layer.top, layer.right, layer.bottom)
+                        detection_method = f"name_match_{target}"
+                        logger.info(f"✅ Layer bounds: {smart_bounds}")
+                        return True  # IMMEDIATE RETURN - KEY TO YOUR WORKING VERSION
+
+                # METHOD 2: Smart Object by layer kind
+                if hasattr(layer, 'kind'):
+                    kind_str = str(layer.kind).lower()
+                    if 'smart' in kind_str:
+                        logger.info(f"✅ Found smart object by kind: {layer_path} - Kind: {layer.kind}")
+                        smart_layer = layer
+                        smart_bounds = (layer.left, layer.top, layer.right, layer.bottom)
+                        detection_method = "smart_object_kind"
+                        return True
+
+                # METHOD 3: Text content for design indicators
+                if hasattr(layer, 'text') and layer.text:
+                    text_lower = layer.text.lower()
+                    text_keywords = [
+                        'design', 'artwork', 'logo', 'replace', 'add your', 'insert',
+                        'place here', 'your design here', 'add design here'
+                    ]
+                    for keyword in text_keywords:
+                        if keyword in text_lower:
+                            logger.info(f"✅ Found design placeholder text: {layer_path} - Text: '{layer.text}' contains '{keyword}'")
+                            smart_layer = layer
+                            smart_bounds = (layer.left, layer.top, layer.right, layer.bottom)
+                            detection_method = f"text_match_{keyword}"
+                            return True
+
+                # METHOD 4: Tagged blocks for smart objects (PSD technical detection)
+                if hasattr(layer, '_tagged_blocks'):
+                    for block in layer._tagged_blocks:
+                        if hasattr(block, 'key'):
+                            block_key = str(block.key)
+                            if 'SoLd' in block_key or 'smart' in block_key.lower():
+                                logger.info(f"✅ Found smart object by tagged block: {layer_path} - Block key: {block_key}")
+                                smart_layer = layer
+                                smart_bounds = (layer.left, layer.top, layer.right, layer.bottom)
+                                detection_method = f"tagged_block_{block_key}"
+                                return True
+
+                # Recurse into groups (layer folders)
+                if hasattr(layer, '__iter__') and hasattr(layer, 'name'):
+                    try:
+                        if find_smart_objects(layer, layer_path):
+                            return True  # Propagate the immediate return
+                    except Exception as e:
+                        logger.warning(f"Error recursing into group {layer_path}: {e}")
+
+            return False
+
+        # Run detection with YOUR WORKING SEQUENCE
+        logger.info("🔍 Starting enhanced smart object search...")
+
+        # First try name/type/text detection
+        if not find_smart_objects(psd):
+            logger.info("⚠️ No smart object found by name/type, trying geometric analysis...")
+
+            # Geometric analysis fallback - YOUR WORKING FALLBACK APPROACH
+            candidates = []
+
+            def collect_candidates(layers, path=""):
+                for layer in layers:
+                    layer_path = f"{path}/{layer.name}" if path else layer.name
+
+                    if hasattr(layer, 'left') and hasattr(layer, 'right'):
+                        width = layer.right - layer.left
+                        height = layer.bottom - layer.top
+                        area = width * height
+
+                        # Look for reasonably sized rectangular layers - YOUR WORKING CRITERIA
+                        if 10000 < area < 2000000:  # Between ~100x100 and ~1414x1414
+                            aspect_ratio = width / height if height > 0 else 0
+                            # Common aspect ratios for design elements
+                            if 0.5 <= aspect_ratio <= 2.0:
+                                candidates.append({
+                                    'layer': layer,
+                                    'bounds': (layer.left, layer.top, layer.right, layer.bottom),
+                                    'area': area,
+                                    'aspect_ratio': aspect_ratio,
+                                    'name': layer.name,
+                                    'path': layer_path
+                                })
+                                logger.info(f"🎯 Geometric candidate: {layer_path} ({width}x{height}, area={area}, ratio={aspect_ratio:.2f})")
+
+                    # Recurse into groups
+                    if hasattr(layer, '__iter__') and hasattr(layer, 'name'):
+                        try:
+                            collect_candidates(layer, layer_path)
+                        except:
+                            pass
+
+            collect_candidates(psd)
+
+            if candidates:
+                # Sort by area (largest first) - YOUR WORKING APPROACH
+                candidates.sort(key=lambda x: x['area'], reverse=True)
+                best = candidates[0]
+
+                smart_layer = best['layer']
+                smart_bounds = best['bounds']
+                detection_method = f"geometric_largest_area_{best['area']}"
+                logger.info(f"📐 Selected largest suitable layer: {best['name']} (area: {best['area']})")
+
+        # Process the replacement - USING YOUR WORKING REPLACEMENT LOGIC
+        if smart_layer and smart_bounds:
+            logger.info(f"🎯 TARGET FOUND! Layer: '{smart_layer.name}', Method: {detection_method}")
+            logger.info(f"📐 Bounds: {smart_bounds}")
+
+            # Get the original PSD as base - YOUR WORKING METHOD
+            base_image = psd.composite()
+            result = base_image.copy()
+
+            # Calculate the area to replace - YOUR WORKING CALCULATION
+            left, top, right, bottom = smart_bounds
+            replacement_width = right - left
+            replacement_height = bottom - top
+
+            logger.info(f"📐 Replacement area: {replacement_width}x{replacement_height}")
+
+            if replacement_width > 0 and replacement_height > 0:
+                # YOUR WORKING RESIZE LOGIC - EXACTLY AS YOU HAVE IT
+                artwork_ratio = artwork.width / artwork.height
+                replacement_ratio = replacement_width / replacement_height
+
+                if artwork_ratio > replacement_ratio:
+                    # Artwork is wider, fit to height and crop width
+                    new_height = replacement_height
+                    new_width = int(replacement_height * artwork_ratio)
+                    crop_x = (new_width - replacement_width) // 2
+                    crop_y = 0
+                else:
+                    # Artwork is taller, fit to width and crop height
+                    new_width = replacement_width
+                    new_height = int(replacement_width / artwork_ratio)
+                    crop_x = 0
+                    crop_y = (new_height - replacement_height) // 2
+
+                # Resize artwork - YOUR WORKING RESIZE
+                artwork_resized = artwork.resize((new_width, new_height), Image.Resampling.LANCZOS)
+
+                # Crop to exact smart object size if needed - YOUR WORKING CROP
+                if new_width > replacement_width or new_height > replacement_height:
+                    crop_box = (crop_x, crop_y, crop_x + replacement_width, crop_y + replacement_height)
+                    artwork_resized = artwork_resized.crop(crop_box)
+
+                # YOUR WORKING PASTE POSITION CALCULATION
+                paste_x = max(0, min(left, result.width - replacement_width))
+                paste_y = max(0, min(top, result.height - replacement_height))
+
+                logger.info(f"🎨 Placing artwork at: ({paste_x}, {paste_y}) with size: {replacement_width}x{replacement_height}")
+
+                # YOUR WORKING PASTE LOGIC - EXACTLY AS YOU HAVE IT
+                if artwork_resized.mode == 'RGBA':
+                    result.paste(artwork_resized, (paste_x, paste_y), artwork_resized)
+                else:
+                    result.paste(artwork_resized, (paste_x, paste_y))
+
+                logger.info("✅ Artwork successfully placed in smart layer!")
+
+                return result
+            else:
+                logger.warning("❌ Invalid replacement bounds")
+                return None
+        else:
+            logger.info("❌ No suitable layer found")
+            return None
+
+    except Exception as e:
+        logger.error(f"❌ Error processing PSD: {e}")
+        logger.error(traceback.format_exc())
+        return None
+
+def process_as_image(mockup_data, artwork_data):
+    """Process files as regular images with enhanced placement"""
+    try:
+        logger.info("🖼️ Processing as regular images...")
+
+        # Load images
+        mockup = Image.open(io.BytesIO(mockup_data))
+        artwork = Image.open(io.BytesIO(artwork_data))
+
+        # Ensure RGBA for proper compositing
+        if mockup.mode != 'RGBA':
+            mockup = mockup.convert('RGBA')
+        if artwork.mode != 'RGBA':
+            artwork = artwork.convert('RGBA')
+
+        # Resize artwork to 70% of mockup size (more realistic than full size)
+        mockup_width, mockup_height = mockup.size
+        target_width = int(mockup_width * 0.7)
+        target_height = int(mockup_height * 0.7)
+
+        # Use same aspect ratio logic as PSD processing
+        artwork_ratio = artwork.width / artwork.height
+        target_ratio = target_width / target_height
+
+        if artwork_ratio > target_ratio:
+            # Artwork is wider, fit to height and crop width
+            new_height = target_height
+            new_width = int(target_height * artwork_ratio)
+            crop_x = (new_width - target_width) // 2
+            crop_y = 0
+        else:
+            # Artwork is taller, fit to width and crop height
+            new_width = target_width
+            new_height = int(target_width / artwork_ratio)
+            crop_x = 0
+            crop_y = (new_height - target_height) // 2
+
+        # Resize and crop
+        artwork_resized = artwork.resize((new_width, new_height), Image.Resampling.LANCZOS)
+
+        if new_width > target_width or new_height > target_height:
+            crop_box = (crop_x, crop_y, crop_x + target_width, crop_y + target_height)
+            artwork_resized = artwork_resized.crop(crop_box)
+
+        # Center the artwork
+        x = (mockup_width - target_width) // 2
+        y = (mockup_height - target_height) // 2
+
+        # Composite
+        result = mockup.copy()
+        result.paste(artwork_resized, (x, y), artwork_resized)
+
+        logger.info("✅ Image processing completed successfully!")
+        return result
+
+    except Exception as e:
+        logger.error(f"❌ Image processing failed: {e}")
+        raise Exception(f"Image processing failed: {str(e)}")
+
+def main():
+    try:
+        # Read input from stdin
+        input_data = json.loads(sys.stdin.read())
+
+        mockup_b64 = input_data['mockup']
+        artwork_b64 = input_data['artwork']
+        filename = input_data.get('filename', 'unknown')
+
+        # Decode base64 data
+        mockup_data = safe_base64_decode(mockup_b64)
+        artwork_data = safe_base64_decode(artwork_b64)
+
+        result_image = None
+        processing_method = "unknown"
+
+        # Try PSD processing first if filename suggests PSD
+        if filename.lower().endswith('.psd'):
+            try:
+                result_image = process_with_enhanced_psd_tools(mockup_data, artwork_data, filename)
+                if result_image:
+                    processing_method = "enhanced_psd_tools"
+                else:
+                    raise Exception("PSD processing returned None")
+            except Exception as psd_error:
+                logger.error(f"Enhanced PSD processing failed: {psd_error}")
+                # Fall back to image processing
+                try:
+                    result_image = process_as_image(mockup_data, artwork_data)
+                    processing_method = "image_fallback"
+                except Exception as img_error:
+                    raise Exception(f"Both PSD and image processing failed. PSD: {psd_error}, Image: {img_error}")
+        else:
+            # Process as regular image
+            result_image = process_as_image(mockup_data, artwork_data)
+            processing_method = "image"
+
+        if result_image is None:
+            raise Exception("No processing method succeeded")
+
+        # Convert to JPEG - YOUR WORKING OUTPUT CONVERSION
+        if result_image.mode == 'RGBA':
+            # Create white background for RGBA images
+            background = Image.new('RGB', result_image.size, (255, 255, 255))
+            background.paste(result_image, mask=result_image.split()[-1])
+            result_image = background
+        elif result_image.mode != 'RGB':
+            result_image = result_image.convert('RGB')
+
+        # Save to buffer with 300 DPI
+        output_buffer = io.BytesIO()
+        result_image.save(output_buffer, format='JPEG', quality=90, optimize=True, dpi=(300, 300))
+
+        # Return base64 encoded result
+        result_b64 = base64.b64encode(output_buffer.getvalue()).decode('utf-8')
+
+        output = {
+            'success': True,
+            'result': result_b64,
+            'method': processing_method,
+            'size': {
+                'width': result_image.size[0],
+                'height': result_image.size[1]
+            }
+        }
+
+        logger.info(f"✅ Processing completed successfully using method: {processing_method}")
+        print(json.dumps(output))
+
+    except Exception as e:
+        logger.error(f"❌ Processing failed: {e}")
+        error_output = {
+            'success': False,
+            'error': str(e),
+            'type': type(e).__name__
+        }
+        print(json.dumps(error_output))
+        sys.exit(1)
+
+if __name__ == '__main__':
+    main()
+`;
+
+  const scriptPath = path.join(DIRS.temp, 'enhanced_psd_processor.py');
+  fs.writeFileSync(scriptPath, pythonScript);
   return scriptPath;
 };
 
@@ -147,13 +497,7 @@ const runPythonProcessor = (mockupData, artworkData, filename) => {
       stderr += data.toString();
     });
 
-    const timeout = setTimeout(() => {
-      python.kill('SIGKILL');
-      reject(new Error('Python processor timed out'));
-    }, 30000);
-
     python.on('close', (code) => {
-      clearTimeout(timeout);
       if (code === 0) {
         try {
           const result = JSON.parse(stdout.trim());
@@ -307,7 +651,7 @@ app.get('/api/mockup/:id', (req, res) => {
 });
 
 // ENHANCED PSD processing endpoint with YOUR WORKING LOGIC INTEGRATED
-app.post('/api/process-psd', burstLimiter, async (req, res) => {
+app.post('/api/process-psd', async (req, res) => {
   const startTime = Date.now();
   console.log('🎨 Starting enhanced mockup processing...');
 
@@ -477,7 +821,7 @@ app.post('/api/package-artwork', upload.single('image'), async (req, res) => {
   }
 });
 
-app.post('/api/generate', heavyProcessLimiter, async (req, res) => {
+app.post('/api/generate', async (req, res) => {
   console.log('🎨 AI Generation request received');
 
   try {
