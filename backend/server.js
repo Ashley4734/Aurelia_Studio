@@ -4,13 +4,23 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import sharp from 'sharp';
 import { v4 as uuidv4 } from 'uuid';
 import JSZip from 'jszip';
 import { jsPDF } from 'jspdf';
 import axios from 'axios';
 import Replicate from 'replicate';
 import { spawn } from 'child_process';
+
+// Try to import sharp (optional dependency for thumbnail generation)
+let sharp = null;
+try {
+  const sharpModule = await import('sharp');
+  sharp = sharpModule.default;
+  console.log('✓ Sharp module loaded successfully');
+} catch (error) {
+  console.warn('⚠ Sharp module not available - thumbnail generation will be disabled');
+  console.warn('  Run "npm install sharp" to enable thumbnail generation');
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -26,11 +36,19 @@ const DIRS = {
   temp: path.join(DATA_DIR, 'temp')
 };
 
+// Initialize required directories
+console.log('Initializing data directories...');
 Object.values(DIRS).forEach(dir => {
   try {
     fs.mkdirSync(dir, { recursive: true });
+    console.log(`✓ Directory ready: ${dir}`);
   } catch (error) {
-    console.log(`Directory ${dir} already exists or created`);
+    if (error.code === 'EEXIST') {
+      console.log(`✓ Directory already exists: ${dir}`);
+    } else {
+      console.error(`✗ Failed to create directory ${dir}:`, error.message);
+      console.error('Application may not function correctly without this directory!');
+    }
   }
 });
 
@@ -65,6 +83,12 @@ const cleanup = (filePath) => {
 
 // Generate thumbnail for mockup file
 const generateThumbnail = async (filePath, id) => {
+  // Skip thumbnail generation if sharp is not available
+  if (!sharp) {
+    console.log('Skipping thumbnail generation (sharp not available)');
+    return null;
+  }
+
   try {
     const thumbnailPath = path.join(DIRS.thumbnails, `${id}.jpg`);
 
@@ -74,9 +98,10 @@ const generateThumbnail = async (filePath, id) => {
       .jpeg({ quality: 85 })
       .toFile(thumbnailPath);
 
+    console.log(`✓ Generated thumbnail for ${id}`);
     return thumbnailPath;
   } catch (error) {
-    console.error('Thumbnail generation error:', error);
+    console.error(`✗ Thumbnail generation error for ${id}:`, error.message);
     return null;
   }
 };
@@ -643,16 +668,18 @@ app.get('/api/mockups', async (req, res) => {
           const stats = fs.statSync(filePath);
           const hasThumbnail = fs.existsSync(thumbnailPath);
 
-          // Try to get image dimensions
+          // Try to get image dimensions (if sharp is available)
           let dimensions = null;
-          try {
-            const metadata = await sharp(filePath).metadata();
-            dimensions = {
-              width: metadata.width,
-              height: metadata.height
-            };
-          } catch (e) {
-            // If sharp fails (e.g., for PSD), dimensions will be null
+          if (sharp) {
+            try {
+              const metadata = await sharp(filePath).metadata();
+              dimensions = {
+                width: metadata.width,
+                height: metadata.height
+              };
+            } catch (e) {
+              // If sharp fails (e.g., for PSD), dimensions will be null
+            }
           }
 
           return {
