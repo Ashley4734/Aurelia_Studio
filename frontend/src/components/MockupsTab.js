@@ -77,16 +77,29 @@ export default function MockupsTab() {
   const loadFromLibrary = async (mockupIds) => {
     try {
       const loadedFiles = [];
+      const existingFileNames = new Set(mockups.map(m => m.name));
+
       for (const id of mockupIds) {
+        const fileName = `${id}.psd`;
+
+        // Skip if already loaded
+        if (existingFileNames.has(fileName)) {
+          toast.info(`"${fileName}" is already loaded`);
+          continue;
+        }
+
         const response = await fetch(`/api/mockup/${id}`);
         if (response.ok) {
           const blob = await response.blob();
-          const file = new File([blob], `${id}.psd`, { type: 'application/octet-stream' });
+          const file = new File([blob], fileName, { type: 'application/octet-stream' });
           loadedFiles.push(file);
         }
       }
-      setMockups([...mockups, ...loadedFiles]);
-      toast.success(`Loaded ${loadedFiles.length} mockup(s) from library`);
+
+      if (loadedFiles.length > 0) {
+        setMockups([...mockups, ...loadedFiles]);
+        toast.success(`Loaded ${loadedFiles.length} mockup(s) from library`);
+      }
     } catch (error) {
       toast.error('Failed to load from library');
     }
