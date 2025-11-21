@@ -53,15 +53,44 @@ Object.values(DIRS).forEach(dir => {
 });
 
 app.use(cors());
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({ limit: '200mb' }));
+app.use(express.urlencoded({ extended: true, limit: '200mb' }));
 app.use(express.static(path.join(__dirname, 'build')));
+
+// File size limit: 200MB to support large PSD and high-resolution image files
+const MAX_FILE_SIZE = 200 * 1024 * 1024;
 
 const upload = multer({
   storage: multer.diskStorage({
     destination: (req, file, cb) => cb(null, DIRS.uploads),
     filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`)
   }),
-  limits: { fileSize: 50 * 1024 * 1024 }
+  limits: { fileSize: MAX_FILE_SIZE },
+  fileFilter: (req, file, cb) => {
+    // Allow common image formats and PSD files
+    const allowedMimes = [
+      'image/jpeg',
+      'image/png',
+      'image/gif',
+      'image/webp',
+      'image/tiff',
+      'image/bmp',
+      'image/vnd.adobe.photoshop',
+      'application/x-photoshop',
+      'application/photoshop',
+      'application/psd',
+      'application/octet-stream' // Some PSD files are detected as this
+    ];
+
+    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.tiff', '.tif', '.bmp', '.psd'];
+    const ext = path.extname(file.originalname).toLowerCase();
+
+    if (allowedMimes.includes(file.mimetype) || allowedExtensions.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`Invalid file type: ${file.mimetype}. Allowed types: JPEG, PNG, GIF, WebP, TIFF, BMP, PSD`), false);
+    }
+  }
 });
 
 const safeFilename = (name) => {
@@ -1640,6 +1669,62 @@ app.get('/api/health', (req, res) => {
       multiMethodDetection: true,
       improvedPlacement: true
     }
+  });
+});
+
+// Error handling middleware for Multer and other errors
+app.use((err, req, res, next) => {
+  // Handle Multer errors
+  if (err instanceof multer.MulterError) {
+    console.error('Multer error:', err.code, err.message);
+
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({
+        error: 'File too large',
+        message: `File exceeds the maximum allowed size of ${MAX_FILE_SIZE / (1024 * 1024)}MB`,
+        code: 'FILE_TOO_LARGE'
+      });
+    }
+
+    if (err.code === 'LIMIT_FILE_COUNT') {
+      return res.status(400).json({
+        error: 'Too many files',
+        message: 'The number of files exceeds the allowed limit',
+        code: 'TOO_MANY_FILES'
+      });
+    }
+
+    if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+      return res.status(400).json({
+        error: 'Unexpected file field',
+        message: 'The uploaded file field name is not expected',
+        code: 'UNEXPECTED_FILE_FIELD'
+      });
+    }
+
+    return res.status(400).json({
+      error: 'File upload error',
+      message: err.message,
+      code: err.code
+    });
+  }
+
+  // Handle file filter errors (invalid file type)
+  if (err.message && err.message.includes('Invalid file type')) {
+    return res.status(415).json({
+      error: 'Invalid file type',
+      message: err.message,
+      code: 'INVALID_FILE_TYPE'
+    });
+  }
+
+  // Log unexpected errors
+  console.error('Unexpected error:', err);
+
+  // Generic error response
+  return res.status(500).json({
+    error: 'Internal server error',
+    message: process.env.NODE_ENV === 'development' ? err.message : 'An unexpected error occurred'
   });
 });
 
