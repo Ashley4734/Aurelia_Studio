@@ -308,7 +308,7 @@ def process_with_enhanced_psd_tools(psd_data, artwork_data, filename):
                     'your logo', 'add logo', 'place logo', 'logo here'
                 ]
 
-                layer_name_lower = layer.name.lower().strip()
+                layer_name_lower = layer.name.replace('\\x00', '').lower().strip()
 
                 for target in target_names:
                     if target in layer_name_lower:
