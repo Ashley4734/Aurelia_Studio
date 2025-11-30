@@ -11,12 +11,21 @@ export default function GenerateTab() {
   const [generationProgress, setGenerationProgress] = useState(0);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [artworkType, setArtworkType] = useState('tv'); // 'tv' or 'wall'
+  const [selectedModel, setSelectedModel] = useState('seedream'); // 'seedream' or 'flux-schnell'
 
   // SeedreamS-3 Parameters
   const [aspectRatio, setAspectRatio] = useState('16:9');
   const [size, setSize] = useState('big');
   const [guidanceScale, setGuidanceScale] = useState(3.5);
   const [useRandomSeed, setUseRandomSeed] = useState(true);
+
+  // Flux Schnell Parameters
+  const [numInferenceSteps, setNumInferenceSteps] = useState(4);
+  const [goFast, setGoFast] = useState(true);
+  const [megapixels, setMegapixels] = useState('1');
+  const [outputFormat, setOutputFormat] = useState('webp');
+  const [outputQuality, setOutputQuality] = useState(80);
+  const [disableSafetyChecker, setDisableSafetyChecker] = useState(false);
 
   const generateImages = async () => {
     const promptLines = prompts.split('\n').map(p => p.trim()).filter(p => p.length > 0);
@@ -45,19 +54,33 @@ export default function GenerateTab() {
         console.log(`🎯 Processing prompt ${i + 1}/${totalPrompts}: "${prompt}"`);
 
         try {
-          // Prepare generation parameters with frontend values
+          // Prepare generation parameters based on selected model
           const requestBody = {
             prompt,
-            aspect_ratio: aspectRatio,      // Use selected aspect ratio
-            size: size,                     // Use selected size
-            guidance_scale: guidanceScale   // Use selected guidance scale
+            model: selectedModel,
+            aspect_ratio: aspectRatio
           };
 
-          // Handle seed parameter properly
-          if (useRandomSeed) {
-            requestBody.seed = Math.floor(Math.random() * 1000000);
+          // Add model-specific parameters
+          if (selectedModel === 'seedream') {
+            requestBody.size = size;
+            requestBody.guidance_scale = guidanceScale;
+            // Handle seed parameter
+            if (useRandomSeed) {
+              requestBody.seed = Math.floor(Math.random() * 1000000);
+            }
+          } else if (selectedModel === 'flux-schnell') {
+            requestBody.num_inference_steps = numInferenceSteps;
+            requestBody.go_fast = goFast;
+            requestBody.megapixels = megapixels;
+            requestBody.output_format = outputFormat;
+            requestBody.output_quality = outputQuality;
+            requestBody.disable_safety_checker = disableSafetyChecker;
+            // Handle seed parameter
+            if (useRandomSeed) {
+              requestBody.seed = Math.floor(Math.random() * 1000000);
+            }
           }
-          // If useRandomSeed is false, don't include seed parameter
 
           console.log('📋 Request body:', requestBody);
 
@@ -76,16 +99,12 @@ export default function GenerateTab() {
             const result = {
               ...responseData,
               id: Date.now() + Math.random(),
-              parameters: {
-                aspect_ratio: aspectRatio,
-                size: size,
-                guidance_scale: guidanceScale,
-                seed: requestBody.seed
-              }
+              model: selectedModel,
+              parameters: requestBody
             };
             newResults.push(result);
             console.log(`✅ Successfully generated image for: "${prompt}"`);
-            console.log(`📐 Generated with: ${aspectRatio}, ${size}, guidance: ${guidanceScale}`);
+            console.log(`📐 Generated with model: ${selectedModel}`);
             toast.success(`Generated image ${i + 1}/${totalPrompts}`);
           } else {
             console.error(`❌ Failed to generate image for: "${prompt}"`, responseData);
@@ -106,7 +125,8 @@ export default function GenerateTab() {
       setResults(newResults);
 
       if (newResults.length > 0) {
-        toast.success(`Generated ${newResults.length} image(s) with SeedreamS-3!`, {
+        const modelName = selectedModel === 'flux-schnell' ? 'Flux Schnell' : 'SeedreamS-3';
+        toast.success(`Generated ${newResults.length} image(s) with ${modelName}!`, {
           icon: '🎨',
           duration: 4000
         });
@@ -251,7 +271,13 @@ export default function GenerateTab() {
           <h3 className="text-2xl font-semibold text-slate-800 flex items-center gap-3">
             <Sparkles className="w-6 h-6 text-accent-500" />
             AI Art Generation
-            <span className="text-sm bg-purple-100 text-purple-700 px-2 py-1 rounded-full">SeedreamS-3</span>
+            <span className={`text-sm px-2 py-1 rounded-full ${
+              selectedModel === 'flux-schnell'
+                ? 'bg-blue-100 text-blue-700'
+                : 'bg-purple-100 text-purple-700'
+            }`}>
+              {selectedModel === 'flux-schnell' ? 'Flux Schnell' : 'SeedreamS-3'}
+            </span>
           </h3>
           <div className="flex gap-2">
             <button
@@ -267,6 +293,48 @@ export default function GenerateTab() {
             >
               Test Connection
             </button>
+          </div>
+        </div>
+
+        {/* Model Selection */}
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-slate-700 mb-3">AI Model</label>
+          <div className="grid grid-cols-2 gap-4">
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setSelectedModel('seedream')}
+              className={`p-4 rounded-xl border-2 transition-all ${
+                selectedModel === 'seedream'
+                  ? 'border-purple-500 bg-purple-50'
+                  : 'border-slate-200 bg-white hover:border-purple-300'
+              }`}
+            >
+              <div className="text-left">
+                <h4 className={`font-semibold mb-1 ${selectedModel === 'seedream' ? 'text-purple-700' : 'text-slate-700'}`}>
+                  SeedreamS-3
+                </h4>
+                <p className="text-sm text-slate-600">High-quality artistic images with guidance control</p>
+              </div>
+            </motion.button>
+
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setSelectedModel('flux-schnell')}
+              className={`p-4 rounded-xl border-2 transition-all ${
+                selectedModel === 'flux-schnell'
+                  ? 'border-blue-500 bg-blue-50'
+                  : 'border-slate-200 bg-white hover:border-blue-300'
+              }`}
+            >
+              <div className="text-left">
+                <h4 className={`font-semibold mb-1 ${selectedModel === 'flux-schnell' ? 'text-blue-700' : 'text-slate-700'}`}>
+                  Flux Schnell
+                </h4>
+                <p className="text-sm text-slate-600">Fast, high-quality image generation (1-4 steps)</p>
+              </div>
+            </motion.button>
           </div>
         </div>
 
@@ -350,38 +418,128 @@ export default function GenerateTab() {
                 </select>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-600 mb-2">Image Size</label>
-                <select
-                  value={size}
-                  onChange={(e) => setSize(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-accent-500 focus:border-accent-500"
-                >
-                  <option value="small">Small (512px min)</option>
-                  <option value="regular">Regular (1MP)</option>
-                  <option value="big">Big (2048px max)</option>
-                </select>
-              </div>
+              {selectedModel === 'seedream' ? (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-600 mb-2">Image Size</label>
+                    <select
+                      value={size}
+                      onChange={(e) => setSize(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-accent-500 focus:border-accent-500"
+                    >
+                      <option value="small">Small (512px min)</option>
+                      <option value="regular">Regular (1MP)</option>
+                      <option value="big">Big (2048px max)</option>
+                    </select>
+                  </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-600 mb-2">
-                  Guidance Scale: {guidanceScale}
-                </label>
-                <input
-                  type="range"
-                  min="1"
-                  max="10"
-                  step="0.5"
-                  value={guidanceScale}
-                  onChange={(e) => setGuidanceScale(parseFloat(e.target.value))}
-                  className="w-full"
-                />
-                <div className="flex justify-between text-xs text-slate-500 mt-1">
-                  <span>Creative</span>
-                  <span>Literal</span>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-600 mb-2">
+                      Guidance Scale: {guidanceScale}
+                    </label>
+                    <input
+                      type="range"
+                      min="1"
+                      max="10"
+                      step="0.5"
+                      value={guidanceScale}
+                      onChange={(e) => setGuidanceScale(parseFloat(e.target.value))}
+                      className="w-full"
+                    />
+                    <div className="flex justify-between text-xs text-slate-500 mt-1">
+                      <span>Creative</span>
+                      <span>Literal</span>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-600 mb-2">
+                      Inference Steps: {numInferenceSteps}
+                    </label>
+                    <input
+                      type="range"
+                      min="1"
+                      max="4"
+                      step="1"
+                      value={numInferenceSteps}
+                      onChange={(e) => setNumInferenceSteps(parseInt(e.target.value))}
+                      className="w-full"
+                    />
+                    <div className="flex justify-between text-xs text-slate-500 mt-1">
+                      <span>Faster</span>
+                      <span>Higher Quality</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-600 mb-2">Megapixels</label>
+                    <select
+                      value={megapixels}
+                      onChange={(e) => setMegapixels(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-accent-500 focus:border-accent-500"
+                    >
+                      <option value="0.25">0.25 MP (Small)</option>
+                      <option value="1">1 MP (Standard)</option>
+                    </select>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {selectedModel === 'flux-schnell' && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-600 mb-2">Output Format</label>
+                  <select
+                    value={outputFormat}
+                    onChange={(e) => setOutputFormat(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-accent-500 focus:border-accent-500"
+                  >
+                    <option value="webp">WebP</option>
+                    <option value="jpg">JPG</option>
+                    <option value="png">PNG</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-600 mb-2">
+                    Quality: {outputQuality}%
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="10"
+                    value={outputQuality}
+                    onChange={(e) => setOutputQuality(parseInt(e.target.value))}
+                    className="w-full"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-2 justify-center">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={goFast}
+                      onChange={(e) => setGoFast(e.target.checked)}
+                      className="rounded"
+                    />
+                    <span className="text-sm text-slate-600">Fast mode (FP8)</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={disableSafetyChecker}
+                      onChange={(e) => setDisableSafetyChecker(e.target.checked)}
+                      className="rounded"
+                    />
+                    <span className="text-sm text-slate-600">Disable safety checker</span>
+                  </label>
                 </div>
               </div>
-            </div>
+            )}
 
             <div className="mt-4">
               <label className="flex items-center gap-2">
@@ -398,7 +556,11 @@ export default function GenerateTab() {
             {/* Current Settings Display */}
             <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
               <div className="text-sm text-blue-700">
-                <strong>Current Settings:</strong> {aspectRatio} • {size} • Guidance: {guidanceScale} • Seed: {useRandomSeed ? 'Random' : 'Fixed'}
+                <strong>Current Settings:</strong> {aspectRatio} •
+                {selectedModel === 'seedream'
+                  ? ` ${size} • Guidance: ${guidanceScale}`
+                  : ` ${megapixels}MP • Steps: ${numInferenceSteps} • ${outputFormat.toUpperCase()}`
+                } • Seed: {useRandomSeed ? 'Random' : 'Fixed'}
               </div>
             </div>
           </motion.div>
@@ -419,7 +581,7 @@ cyberpunk city at night"
             className="w-full px-4 py-4 bg-white/70 border border-white/50 rounded-xl focus:outline-none focus:ring-2 focus:ring-accent-500 resize-none font-mono text-sm"
           />
           <p className="text-xs text-slate-500 mt-2">
-            Each line will generate one image. Be descriptive for better results with SeedreamS-3.
+            Each line will generate one image. Be descriptive for better results with {selectedModel === 'flux-schnell' ? 'Flux Schnell' : 'SeedreamS-3'}.
           </p>
         </div>
 
@@ -428,7 +590,9 @@ cyberpunk city at night"
           <div className="mb-6 p-4 bg-blue-50 rounded-xl border border-blue-200">
             <div className="flex items-center gap-2 mb-2">
               <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-              <span className="text-sm font-medium text-blue-700">Generating with SeedreamS-3...</span>
+              <span className="text-sm font-medium text-blue-700">
+                Generating with {selectedModel === 'flux-schnell' ? 'Flux Schnell' : 'SeedreamS-3'}...
+              </span>
             </div>
             {currentPrompt && (
               <p className="text-sm text-blue-600 mb-2">Current: {currentPrompt}</p>
@@ -457,7 +621,7 @@ cyberpunk city at night"
           ) : (
             <>
               <Zap className="w-5 h-5" />
-              Generate with SeedreamS-3
+              Generate with {selectedModel === 'flux-schnell' ? 'Flux Schnell' : 'SeedreamS-3'}
             </>
           )}
         </motion.button>
@@ -534,12 +698,28 @@ cyberpunk city at night"
                   <p className="text-sm text-slate-600 mb-2 overflow-hidden" style={{display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical'}}>{result.prompt}</p>
                   <div className="flex items-center justify-between text-xs">
                     <div className="flex flex-col gap-1">
-                      <span className="text-slate-400">
-                        {result.parameters?.aspect_ratio} • {result.parameters?.size}
+                      <span className={`text-xs px-2 py-0.5 rounded ${
+                        result.model === 'flux-schnell'
+                          ? 'bg-blue-50 text-blue-600'
+                          : 'bg-purple-50 text-purple-600'
+                      }`}>
+                        {result.model === 'flux-schnell' ? 'Flux Schnell' : 'SeedreamS-3'}
                       </span>
                       <span className="text-slate-400">
-                        Guidance: {result.parameters?.guidance_scale}
+                        {result.parameters?.aspect_ratio}
+                        {result.model === 'seedream' && result.parameters?.size && ` • ${result.parameters.size}`}
+                        {result.model === 'flux-schnell' && result.parameters?.megapixels && ` • ${result.parameters.megapixels}MP`}
                       </span>
+                      {result.model === 'seedream' && result.parameters?.guidance_scale && (
+                        <span className="text-slate-400">
+                          Guidance: {result.parameters.guidance_scale}
+                        </span>
+                      )}
+                      {result.model === 'flux-schnell' && result.parameters?.num_inference_steps && (
+                        <span className="text-slate-400">
+                          Steps: {result.parameters.num_inference_steps}
+                        </span>
+                      )}
                       {result.parameters?.seed && (
                         <span className="text-slate-400">
                           Seed: {result.parameters.seed}
@@ -574,8 +754,13 @@ cyberpunk city at night"
           <div className="mt-2 p-3 bg-slate-100 rounded-lg text-xs text-slate-600 max-w-md">
             <p>Check browser console (F12) for detailed logs</p>
             <p>API endpoint: /api/generate</p>
-            <p>Model: bytedance/seedream-3</p>
-            <p>Current settings: {aspectRatio} • {size} • Guidance: {guidanceScale}</p>
+            <p>Model: {selectedModel === 'flux-schnell' ? 'black-forest-labs/flux-schnell' : 'bytedance/seedream-3'}</p>
+            <p>Current settings: {aspectRatio} •
+              {selectedModel === 'seedream'
+                ? ` ${size} • Guidance: ${guidanceScale}`
+                : ` ${megapixels}MP • Steps: ${numInferenceSteps}`
+              }
+            </p>
             <p className="mt-2 text-slate-500">💡 Tip: Click download buttons to save images locally</p>
           </div>
         </details>
