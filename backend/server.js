@@ -1108,9 +1108,19 @@ app.post('/api/generate', async (req, res) => {
     // Extract ALL parameters from request body
     const {
       prompt,
+      model = 'seedream',
       aspect_ratio = '1:1',
-      size = 'regular',
-      guidance_scale = 3.5,
+      // SeedreamS-3 parameters
+      size,
+      guidance_scale,
+      // Flux Schnell parameters
+      num_inference_steps,
+      go_fast,
+      megapixels,
+      output_format,
+      output_quality,
+      disable_safety_checker,
+      // Common parameters
       seed
     } = req.body;
 
@@ -1120,8 +1130,9 @@ app.post('/api/generate', async (req, res) => {
       return res.status(400).json({ error: 'Prompt required' });
     }
 
+    const modelName = model === 'flux-schnell' ? 'Flux Schnell' : 'SeedreamS-3';
     console.log(`🎯 Processing prompt: "${prompt.trim()}"`);
-    console.log(`📐 Parameters: ${aspect_ratio}, ${size}, guidance: ${guidance_scale}`);
+    console.log(`🤖 Selected model: ${modelName}`);
 
     // Check for API token
     const token = process.env.REPLICATE_API_TOKEN;
@@ -1139,28 +1150,54 @@ app.post('/api/generate', async (req, res) => {
     const replicate = new Replicate({ auth: token });
 
     // Try the generation with detailed logging
-    console.log('🚀 Starting image generation with SeedreamS-3...');
+    console.log(`🚀 Starting image generation with ${modelName}...`);
 
     try {
-      // Prepare input parameters - USE FRONTEND VALUES!
-      const inputParams = {
-        prompt: prompt.trim(),
-        aspect_ratio: aspect_ratio,     // Use frontend value
-        size: size,                     // Use frontend value
-        guidance_scale: guidance_scale  // Use frontend value
-      };
+      // Prepare input parameters based on selected model
+      let inputParams;
+      let replicateModel;
 
-      // Add seed if provided or use random
-      if (seed !== undefined && seed !== null) {
-        inputParams.seed = seed;
+      if (model === 'flux-schnell') {
+        // Flux Schnell parameters
+        replicateModel = "black-forest-labs/flux-schnell";
+        inputParams = {
+          prompt: prompt.trim(),
+          aspect_ratio: aspect_ratio,
+          num_inference_steps: num_inference_steps || 4,
+          go_fast: go_fast !== undefined ? go_fast : true,
+          megapixels: megapixels || '1',
+          output_format: output_format || 'webp',
+          output_quality: output_quality || 80,
+          disable_safety_checker: disable_safety_checker || false
+        };
+
+        // Add seed if provided
+        if (seed !== undefined && seed !== null) {
+          inputParams.seed = seed;
+        }
       } else {
-        inputParams.seed = Math.floor(Math.random() * 1000000);
+        // SeedreamS-3 parameters
+        replicateModel = "bytedance/seedream-3";
+        inputParams = {
+          prompt: prompt.trim(),
+          aspect_ratio: aspect_ratio,
+          size: size || 'regular',
+          guidance_scale: guidance_scale || 3.5
+        };
+
+        // Add seed if provided or use random
+        if (seed !== undefined && seed !== null) {
+          inputParams.seed = seed;
+        } else {
+          inputParams.seed = Math.floor(Math.random() * 1000000);
+        }
       }
 
       console.log('📋 Input parameters:', inputParams);
+      console.log(`📡 Calling ${replicateModel}...`);
 
-      // Use bytedance/seedream-3 with frontend parameters
-      const output = await replicate.run("bytedance/seedream-3", {
+      // Use the selected model
+      const output = await replicate.run(replicateModel, {
         input: inputParams
       });
 
@@ -1190,13 +1227,10 @@ app.post('/api/generate', async (req, res) => {
         imageUrl: imageUrl,
         prompt: prompt.trim(),
         timestamp: new Date().toISOString(),
-        model: 'seedream-3',
-        parameters: {
-          aspect_ratio: aspect_ratio,
-          size: size,
-          guidance_scale: guidance_scale,
-          seed: inputParams.seed
-        },
+        model: model,
+        modelName: modelName,
+        replicateModel: replicateModel,
+        parameters: inputParams,
         success: true
       };
 
@@ -1211,23 +1245,34 @@ app.post('/api/generate', async (req, res) => {
         response: replicateError.response
       });
 
-      // Try fallback with different parameters if SeedreamS-3 fails
+      // Try fallback with different parameters if model fails
       if (replicateError.message?.includes('not found') || replicateError.status === 404) {
-        console.log('🔄 Trying SeedreamS-3 with fallback parameters...');
+        console.log(`🔄 Trying ${modelName} with fallback parameters...`);
 
         try {
-          // Use same user parameters but with fallback adjustments
-          const fallbackParams = {
-            prompt: prompt.trim(),
-            aspect_ratio: aspect_ratio,    // Keep user's choice
-            size: size === 'big' ? 'regular' : size,  // Downgrade size if big fails
-            guidance_scale: guidance_scale,
-            seed: Math.floor(Math.random() * 1000000)  // New random seed
-          };
+          let fallbackParams;
+
+          if (model === 'flux-schnell') {
+            // For Flux Schnell, try with minimal steps and lower quality
+            fallbackParams = {
+              ...inputParams,
+              num_inference_steps: 1,  // Fastest setting
+              megapixels: '0.25'        // Smallest size
+            };
+          } else {
+            // For SeedreamS-3, downgrade size if big fails
+            fallbackParams = {
+              prompt: prompt.trim(),
+              aspect_ratio: aspect_ratio,
+              size: size === 'big' ? 'regular' : size,
+              guidance_scale: guidance_scale || 3.5,
+              seed: Math.floor(Math.random() * 1000000)
+            };
+          }
 
           console.log('📋 Fallback parameters:', fallbackParams);
 
-          const fallbackOutput = await replicate.run("bytedance/seedream-3", {
+          const fallbackOutput = await replicate.run(replicateModel, {
             input: fallbackParams
           });
 
@@ -1239,7 +1284,9 @@ app.post('/api/generate', async (req, res) => {
             imageUrl: fallbackImageUrl,
             prompt: prompt.trim(),
             timestamp: new Date().toISOString(),
-            model: 'seedream-3-fallback',
+            model: `${model}-fallback`,
+            modelName: `${modelName} (fallback)`,
+            replicateModel: replicateModel,
             parameters: fallbackParams,
             success: true
           });
@@ -1261,6 +1308,8 @@ app.post('/api/generate', async (req, res) => {
     let errorMessage = 'Image generation failed';
     let errorDetails = error.message;
 
+    const modelName = req.body.model === 'flux-schnell' ? 'Flux Schnell' : 'SeedreamS-3';
+
     if (error.message?.includes('auth') || error.message?.includes('token')) {
       statusCode = 401;
       errorMessage = 'Authentication failed';
@@ -1268,7 +1317,7 @@ app.post('/api/generate', async (req, res) => {
     } else if (error.message?.includes('not found')) {
       statusCode = 404;
       errorMessage = 'Model not found';
-      errorDetails = 'The SeedreamS-3 model is not available';
+      errorDetails = `The ${modelName} model is not available`;
     } else if (error.message?.includes('rate limit')) {
       statusCode = 429;
       errorMessage = 'Rate limit exceeded';
