@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
-import { Sparkles, Zap, Settings, CheckCircle, Download, Eye } from 'lucide-react';
+import { Sparkles, Zap, Settings, CheckCircle, Download, Eye, RefreshCw } from 'lucide-react';
 
 export default function GenerateTab() {
   const [prompts, setPrompts] = useState('');
@@ -12,6 +12,7 @@ export default function GenerateTab() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [artworkType, setArtworkType] = useState('tv'); // 'tv' or 'wall'
   const [selectedModel, setSelectedModel] = useState('seedream'); // 'seedream' or 'flux-schnell'
+  const [regeneratingIndex, setRegeneratingIndex] = useState(null); // Track which image is being regenerated
 
   // SeedreamS-3 Parameters
   const [aspectRatio, setAspectRatio] = useState('16:9');
@@ -249,6 +250,64 @@ export default function GenerateTab() {
     } catch (error) {
       console.error('Batch download failed:', error);
       toast.error('Failed to download images', { id: 'download-all' });
+    }
+  };
+
+  const regenerateImage = async (index) => {
+    const result = results[index];
+    if (!result) return;
+
+    console.log('🔄 Regenerating image at index:', index);
+    console.log('📋 Original parameters:', result.parameters);
+
+    setRegeneratingIndex(index);
+
+    try {
+      toast.loading('Regenerating image...', { id: 'regenerate' });
+
+      // Use the same parameters from the original generation
+      const requestBody = { ...result.parameters };
+
+      // Generate new random seed if random seed was used
+      if (result.parameters.seed && useRandomSeed) {
+        requestBody.seed = Math.floor(Math.random() * 1000000);
+      }
+
+      console.log('📋 Regeneration request body:', requestBody);
+
+      const response = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody)
+      });
+
+      console.log('📡 Regeneration response status:', response.status);
+
+      const responseData = await response.json();
+      console.log('📦 Regeneration response data:', responseData);
+
+      if (response.ok && responseData.success) {
+        // Update the specific image in the results array
+        const updatedResults = [...results];
+        updatedResults[index] = {
+          ...responseData,
+          id: Date.now() + Math.random(),
+          model: result.model,
+          parameters: requestBody
+        };
+        setResults(updatedResults);
+
+        console.log(`✅ Successfully regenerated image`);
+        toast.success('Image regenerated successfully!', { id: 'regenerate' });
+      } else {
+        console.error(`❌ Failed to regenerate image:`, responseData);
+        toast.error(`Failed: ${responseData.error || 'Unknown error'}`, { id: 'regenerate' });
+      }
+    } catch (error) {
+      console.error('❌ Regeneration failed:', error);
+      toast.error('Failed to regenerate image', { id: 'regenerate' });
+    } finally {
+      setRegeneratingIndex(null);
     }
   };
 
@@ -676,19 +735,39 @@ cyberpunk city at night"
                     Failed to load image
                   </div>
 
+                  {/* Loading overlay when regenerating */}
+                  {regeneratingIndex === index && (
+                    <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center">
+                      <RefreshCw className="w-8 h-8 text-white animate-spin mb-2" />
+                      <span className="text-white text-sm font-medium">Regenerating...</span>
+                    </div>
+                  )}
+
                   {/* Hover overlay with action buttons */}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-between p-3">
-                    <button
-                      onClick={() => downloadImage(result.imageUrl, result.prompt, index)}
-                      className="p-2 bg-white/90 hover:bg-white rounded-lg transition-colors"
-                      title="Download Image"
-                    >
-                      <Download className="w-4 h-4 text-slate-700" />
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => downloadImage(result.imageUrl, result.prompt, index)}
+                        className="p-2 bg-white/90 hover:bg-white rounded-lg transition-colors"
+                        title="Download Image"
+                        disabled={regeneratingIndex === index}
+                      >
+                        <Download className="w-4 h-4 text-slate-700" />
+                      </button>
+                      <button
+                        onClick={() => regenerateImage(index)}
+                        className="p-2 bg-white/90 hover:bg-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Regenerate Image"
+                        disabled={regeneratingIndex === index}
+                      >
+                        <RefreshCw className={`w-4 h-4 text-slate-700 ${regeneratingIndex === index ? 'animate-spin' : ''}`} />
+                      </button>
+                    </div>
                     <button
                       onClick={() => window.open(result.imageUrl, '_blank')}
                       className="p-2 bg-white/90 hover:bg-white rounded-lg transition-colors"
                       title="View Full Size"
+                      disabled={regeneratingIndex === index}
                     >
                       <Eye className="w-4 h-4 text-slate-700" />
                     </button>
