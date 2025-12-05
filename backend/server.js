@@ -1120,6 +1120,9 @@ app.post('/api/generate', async (req, res) => {
       output_format,
       output_quality,
       disable_safety_checker,
+      // Flux 1.1 Pro parameters
+      safety_tolerance,
+      prompt_upsampling,
       // Common parameters
       seed
     } = req.body;
@@ -1130,7 +1133,7 @@ app.post('/api/generate', async (req, res) => {
       return res.status(400).json({ error: 'Prompt required' });
     }
 
-    const modelName = model === 'flux-schnell' ? 'Flux Schnell' : 'SeedreamS-3';
+    const modelName = model === 'flux-schnell' ? 'Flux Schnell' : model === 'flux-1.1-pro' ? 'Flux 1.1 Pro' : 'SeedreamS-3';
     console.log(`🎯 Processing prompt: "${prompt.trim()}"`);
     console.log(`🤖 Selected model: ${modelName}`);
 
@@ -1169,6 +1172,22 @@ app.post('/api/generate', async (req, res) => {
           output_format: output_format || 'webp',
           output_quality: output_quality || 80,
           disable_safety_checker: disable_safety_checker || false
+        };
+
+        // Add seed if provided
+        if (seed !== undefined && seed !== null) {
+          inputParams.seed = seed;
+        }
+      } else if (model === 'flux-1.1-pro') {
+        // Flux 1.1 Pro parameters
+        replicateModel = "black-forest-labs/flux-1.1-pro";
+        inputParams = {
+          prompt: prompt.trim(),
+          aspect_ratio: aspect_ratio,
+          output_format: output_format || 'webp',
+          output_quality: output_quality || 80,
+          safety_tolerance: safety_tolerance || 2,
+          prompt_upsampling: prompt_upsampling || false
         };
 
         // Add seed if provided
