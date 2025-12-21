@@ -1123,6 +1123,9 @@ app.post('/api/generate', async (req, res) => {
       // Flux 1.1 Pro parameters
       safety_tolerance,
       prompt_upsampling,
+      width,
+      height,
+      image_prompt,
       // Common parameters
       seed
     } = req.body;
@@ -1189,6 +1192,23 @@ app.post('/api/generate', async (req, res) => {
           safety_tolerance: safety_tolerance || 2,
           prompt_upsampling: prompt_upsampling || false
         };
+
+        // Add custom width/height when using custom aspect ratio
+        if (aspect_ratio === 'custom') {
+          if (width !== undefined && width !== null) {
+            // Round to nearest multiple of 32
+            inputParams.width = Math.round(width / 32) * 32;
+          }
+          if (height !== undefined && height !== null) {
+            // Round to nearest multiple of 32
+            inputParams.height = Math.round(height / 32) * 32;
+          }
+        }
+
+        // Add image prompt URL for Flux Redux if provided
+        if (image_prompt && image_prompt.trim()) {
+          inputParams.image_prompt = image_prompt.trim();
+        }
 
         // Add seed if provided
         if (seed !== undefined && seed !== null) {
