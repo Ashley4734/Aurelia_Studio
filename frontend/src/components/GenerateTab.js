@@ -31,6 +31,9 @@ export default function GenerateTab() {
   // Flux 1.1 Pro Parameters
   const [safetyTolerance, setSafetyTolerance] = useState(2);
   const [promptUpsampling, setPromptUpsampling] = useState(false);
+  const [fluxWidth, setFluxWidth] = useState(1024);
+  const [fluxHeight, setFluxHeight] = useState(1024);
+  const [imagePromptUrl, setImagePromptUrl] = useState('');
 
   const generateImages = async () => {
     const promptLines = prompts.split('\n').map(p => p.trim()).filter(p => p.length > 0);
@@ -90,6 +93,15 @@ export default function GenerateTab() {
             requestBody.output_quality = outputQuality;
             requestBody.safety_tolerance = safetyTolerance;
             requestBody.prompt_upsampling = promptUpsampling;
+            // Add custom width/height when using custom aspect ratio
+            if (aspectRatio === 'custom') {
+              requestBody.width = fluxWidth;
+              requestBody.height = fluxHeight;
+            }
+            // Add image prompt URL for Flux Redux if provided
+            if (imagePromptUrl.trim()) {
+              requestBody.image_prompt = imagePromptUrl.trim();
+            }
             // Handle seed parameter
             if (useRandomSeed) {
               requestBody.seed = Math.floor(Math.random() * 1000000);
@@ -139,7 +151,7 @@ export default function GenerateTab() {
       setResults(newResults);
 
       if (newResults.length > 0) {
-        const modelName = selectedModel === 'flux-schnell' ? 'Flux Schnell' : 'SeedreamS-3';
+        const modelName = selectedModel === 'flux-schnell' ? 'Flux Schnell' : selectedModel === 'flux-1.1-pro' ? 'Flux 1.1 Pro' : 'SeedreamS-3';
         toast.success(`Generated ${newResults.length} image(s) with ${modelName}!`, {
           icon: '🎨',
           duration: 4000
@@ -346,9 +358,11 @@ export default function GenerateTab() {
             <span className={`text-sm px-2 py-1 rounded-full ${
               selectedModel === 'flux-schnell'
                 ? 'bg-blue-100 text-blue-700'
+                : selectedModel === 'flux-1.1-pro'
+                ? 'bg-emerald-100 text-emerald-700'
                 : 'bg-purple-100 text-purple-700'
             }`}>
-              {selectedModel === 'flux-schnell' ? 'Flux Schnell' : 'SeedreamS-3'}
+              {selectedModel === 'flux-schnell' ? 'Flux Schnell' : selectedModel === 'flux-1.1-pro' ? 'Flux 1.1 Pro' : 'SeedreamS-3'}
             </span>
           </h3>
           <div className="flex gap-2">
@@ -497,12 +511,23 @@ export default function GenerateTab() {
                   onChange={(e) => setAspectRatio(e.target.value)}
                   className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-accent-500 focus:border-accent-500"
                 >
+                  {selectedModel === 'flux-1.1-pro' && (
+                    <option value="custom">Custom (set width/height)</option>
+                  )}
                   <option value="1:1">Square (1:1)</option>
                   <option value="16:9">TV Landscape (16:9)</option>
                   <option value="3:4">Wall Portrait (3:4 / Similar to 16x20")</option>
                   <option value="9:16">Portrait (9:16)</option>
                   <option value="4:3">Classic (4:3)</option>
-                  <option value="21:9">Ultra-wide (21:9)</option>
+                  {selectedModel === 'flux-1.1-pro' && (
+                    <>
+                      <option value="4:5">Portrait (4:5)</option>
+                      <option value="5:4">Landscape (5:4)</option>
+                    </>
+                  )}
+                  {selectedModel !== 'flux-1.1-pro' && (
+                    <option value="21:9">Ultra-wide (21:9)</option>
+                  )}
                   <option value="3:2">Camera (3:2)</option>
                   <option value="2:3">Vertical (2:3)</option>
                 </select>
@@ -613,6 +638,49 @@ export default function GenerateTab() {
                   </div>
                 </>
               )}
+
+              {/* Custom Width/Height for Flux 1.1 Pro */}
+              {selectedModel === 'flux-1.1-pro' && aspectRatio === 'custom' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-600 mb-2">
+                      Width: {fluxWidth}px
+                    </label>
+                    <input
+                      type="range"
+                      min="256"
+                      max="1440"
+                      step="32"
+                      value={fluxWidth}
+                      onChange={(e) => setFluxWidth(parseInt(e.target.value))}
+                      className="w-full"
+                    />
+                    <div className="flex justify-between text-xs text-slate-500 mt-1">
+                      <span>256</span>
+                      <span>1440</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-600 mb-2">
+                      Height: {fluxHeight}px
+                    </label>
+                    <input
+                      type="range"
+                      min="256"
+                      max="1440"
+                      step="32"
+                      value={fluxHeight}
+                      onChange={(e) => setFluxHeight(parseInt(e.target.value))}
+                      className="w-full"
+                    />
+                    <div className="flex justify-between text-xs text-slate-500 mt-1">
+                      <span>256</span>
+                      <span>1440</span>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
 
             {selectedModel === 'flux-schnell' && (
@@ -697,6 +765,23 @@ export default function GenerateTab() {
                     className="w-full"
                   />
                 </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-slate-600 mb-2">
+                    Image Prompt URL (Flux Redux)
+                    <span className="text-xs text-slate-400 ml-2">Optional - guide generation with a reference image</span>
+                  </label>
+                  <input
+                    type="url"
+                    value={imagePromptUrl}
+                    onChange={(e) => setImagePromptUrl(e.target.value)}
+                    placeholder="https://example.com/reference-image.jpg"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-accent-500 focus:border-accent-500"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">
+                    Provide a URL to an image (jpeg, png, gif, webp) to guide the generation towards its composition
+                  </p>
+                </div>
               </div>
             )}
 
@@ -715,10 +800,12 @@ export default function GenerateTab() {
             {/* Current Settings Display */}
             <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
               <div className="text-sm text-blue-700">
-                <strong>Current Settings:</strong> {aspectRatio} •
+                <strong>Current Settings:</strong> {aspectRatio}
+                {selectedModel === 'flux-1.1-pro' && aspectRatio === 'custom' && ` (${fluxWidth}×${fluxHeight}px)`} •
                 {selectedModel === 'seedream' && ` ${size} • Guidance: ${guidanceScale}`}
                 {selectedModel === 'flux-schnell' && ` ${megapixels}MP • Steps: ${numInferenceSteps} • ${outputFormat.toUpperCase()}`}
                 {selectedModel === 'flux-1.1-pro' && ` Safety: ${safetyTolerance} • ${outputFormat.toUpperCase()} • ${promptUpsampling ? 'Upsampling ON' : 'Upsampling OFF'}`}
+                {selectedModel === 'flux-1.1-pro' && imagePromptUrl.trim() && ' • Redux: ON'}
                 {' '}• Seed: {useRandomSeed ? 'Random' : 'Fixed'}
               </div>
             </div>
@@ -750,7 +837,7 @@ cyberpunk city at night"
             <div className="flex items-center gap-2 mb-2">
               <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
               <span className="text-sm font-medium text-blue-700">
-                Generating with {selectedModel === 'flux-schnell' ? 'Flux Schnell' : 'SeedreamS-3'}...
+                Generating with {selectedModel === 'flux-schnell' ? 'Flux Schnell' : selectedModel === 'flux-1.1-pro' ? 'Flux 1.1 Pro' : 'SeedreamS-3'}...
               </span>
             </div>
             {currentPrompt && (
@@ -780,7 +867,7 @@ cyberpunk city at night"
           ) : (
             <>
               <Zap className="w-5 h-5" />
-              Generate with {selectedModel === 'flux-schnell' ? 'Flux Schnell' : 'SeedreamS-3'}
+              Generate with {selectedModel === 'flux-schnell' ? 'Flux Schnell' : selectedModel === 'flux-1.1-pro' ? 'Flux 1.1 Pro' : 'SeedreamS-3'}
             </>
           )}
         </motion.button>
@@ -880,12 +967,15 @@ cyberpunk city at night"
                       <span className={`text-xs px-2 py-0.5 rounded ${
                         result.model === 'flux-schnell'
                           ? 'bg-blue-50 text-blue-600'
+                          : result.model === 'flux-1.1-pro'
+                          ? 'bg-emerald-50 text-emerald-600'
                           : 'bg-purple-50 text-purple-600'
                       }`}>
-                        {result.model === 'flux-schnell' ? 'Flux Schnell' : 'SeedreamS-3'}
+                        {result.model === 'flux-schnell' ? 'Flux Schnell' : result.model === 'flux-1.1-pro' ? 'Flux 1.1 Pro' : 'SeedreamS-3'}
                       </span>
                       <span className="text-slate-400">
                         {result.parameters?.aspect_ratio}
+                        {result.model === 'flux-1.1-pro' && result.parameters?.aspect_ratio === 'custom' && result.parameters?.width && ` (${result.parameters.width}×${result.parameters.height})`}
                         {result.model === 'seedream' && result.parameters?.size && ` • ${result.parameters.size}`}
                         {result.model === 'flux-schnell' && result.parameters?.megapixels && ` • ${result.parameters.megapixels}MP`}
                       </span>
@@ -897,6 +987,16 @@ cyberpunk city at night"
                       {result.model === 'flux-schnell' && result.parameters?.num_inference_steps && (
                         <span className="text-slate-400">
                           Steps: {result.parameters.num_inference_steps}
+                        </span>
+                      )}
+                      {result.model === 'flux-1.1-pro' && (
+                        <span className="text-slate-400">
+                          Safety: {result.parameters?.safety_tolerance} • {result.parameters?.prompt_upsampling ? 'Upsampling' : 'No upsampling'}
+                        </span>
+                      )}
+                      {result.model === 'flux-1.1-pro' && result.parameters?.image_prompt && (
+                        <span className="text-slate-400">
+                          Redux: ON
                         </span>
                       )}
                       {result.parameters?.seed && (
@@ -933,12 +1033,12 @@ cyberpunk city at night"
           <div className="mt-2 p-3 bg-slate-100 rounded-lg text-xs text-slate-600 max-w-md">
             <p>Check browser console (F12) for detailed logs</p>
             <p>API endpoint: /api/generate</p>
-            <p>Model: {selectedModel === 'flux-schnell' ? 'black-forest-labs/flux-schnell' : 'bytedance/seedream-3'}</p>
-            <p>Current settings: {aspectRatio} •
-              {selectedModel === 'seedream'
-                ? ` ${size} • Guidance: ${guidanceScale}`
-                : ` ${megapixels}MP • Steps: ${numInferenceSteps}`
-              }
+            <p>Model: {selectedModel === 'flux-schnell' ? 'black-forest-labs/flux-schnell' : selectedModel === 'flux-1.1-pro' ? 'black-forest-labs/flux-1.1-pro' : 'bytedance/seedream-3'}</p>
+            <p>Current settings: {aspectRatio}
+              {selectedModel === 'flux-1.1-pro' && aspectRatio === 'custom' ? ` (${fluxWidth}×${fluxHeight})` : ''} •
+              {selectedModel === 'seedream' && ` ${size} • Guidance: ${guidanceScale}`}
+              {selectedModel === 'flux-schnell' && ` ${megapixels}MP • Steps: ${numInferenceSteps}`}
+              {selectedModel === 'flux-1.1-pro' && ` Safety: ${safetyTolerance} • ${promptUpsampling ? 'Upsampling' : 'No upsampling'}`}
             </p>
             <p className="mt-2 text-slate-500">💡 Tip: Click download buttons to save images locally</p>
           </div>
