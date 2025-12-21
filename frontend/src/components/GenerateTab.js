@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
+import { useDropzone } from 'react-dropzone';
 import toast from 'react-hot-toast';
-import { Sparkles, Zap, Settings, CheckCircle, Download, Eye, RefreshCw } from 'lucide-react';
+import { Sparkles, Zap, Settings, CheckCircle, Download, Eye, RefreshCw, Upload, X, Link } from 'lucide-react';
 
 export default function GenerateTab() {
   const [prompts, setPrompts] = useState('');
@@ -34,6 +35,47 @@ export default function GenerateTab() {
   const [fluxWidth, setFluxWidth] = useState(1024);
   const [fluxHeight, setFluxHeight] = useState(1024);
   const [imagePromptUrl, setImagePromptUrl] = useState('');
+  const [imagePromptFile, setImagePromptFile] = useState(null);
+  const [imagePromptPreview, setImagePromptPreview] = useState(null);
+  const [imagePromptMode, setImagePromptMode] = useState('upload'); // 'upload' or 'url'
+
+  // Convert file to base64 data URI
+  const fileToBase64 = useCallback((file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }, []);
+
+  // Handle image drop for reference image
+  const onImageDrop = useCallback((acceptedFiles) => {
+    if (acceptedFiles[0]) {
+      const file = acceptedFiles[0];
+      setImagePromptFile(file);
+      setImagePromptPreview(URL.createObjectURL(file));
+      setImagePromptUrl(''); // Clear URL when file is uploaded
+      toast.success('Reference image uploaded');
+    }
+  }, []);
+
+  // Clear the uploaded reference image
+  const clearImagePrompt = useCallback(() => {
+    if (imagePromptPreview) {
+      URL.revokeObjectURL(imagePromptPreview);
+    }
+    setImagePromptFile(null);
+    setImagePromptPreview(null);
+    setImagePromptUrl('');
+  }, [imagePromptPreview]);
+
+  // Dropzone for reference image
+  const imagePromptDropzone = useDropzone({
+    accept: { 'image/*': ['.jpg', '.jpeg', '.png', '.gif', '.webp'] },
+    multiple: false,
+    onDrop: onImageDrop
+  });
 
   const generateImages = async () => {
     const promptLines = prompts.split('\n').map(p => p.trim()).filter(p => p.length > 0);
@@ -98,8 +140,12 @@ export default function GenerateTab() {
               requestBody.width = fluxWidth;
               requestBody.height = fluxHeight;
             }
-            // Add image prompt URL for Flux Redux if provided
-            if (imagePromptUrl.trim()) {
+            // Add image prompt for Flux Redux if provided (file or URL)
+            if (imagePromptFile) {
+              // Convert file to base64 data URI
+              const base64Image = await fileToBase64(imagePromptFile);
+              requestBody.image_prompt = base64Image;
+            } else if (imagePromptUrl.trim()) {
               requestBody.image_prompt = imagePromptUrl.trim();
             }
             // Handle seed parameter
@@ -768,18 +814,99 @@ export default function GenerateTab() {
 
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-slate-600 mb-2">
-                    Image Prompt URL (Flux Redux)
+                    Image Prompt (Flux Redux)
                     <span className="text-xs text-slate-400 ml-2">Optional - guide generation with a reference image</span>
                   </label>
-                  <input
-                    type="url"
-                    value={imagePromptUrl}
-                    onChange={(e) => setImagePromptUrl(e.target.value)}
-                    placeholder="https://example.com/reference-image.jpg"
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-accent-500 focus:border-accent-500"
-                  />
-                  <p className="text-xs text-slate-500 mt-1">
-                    Provide a URL to an image (jpeg, png, gif, webp) to guide the generation towards its composition
+
+                  {/* Mode Toggle */}
+                  <div className="flex gap-2 mb-3">
+                    <button
+                      type="button"
+                      onClick={() => setImagePromptMode('upload')}
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                        imagePromptMode === 'upload'
+                          ? 'bg-emerald-100 text-emerald-700 border border-emerald-300'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      <Upload className="w-4 h-4" />
+                      Upload
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setImagePromptMode('url')}
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                        imagePromptMode === 'url'
+                          ? 'bg-emerald-100 text-emerald-700 border border-emerald-300'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      <Link className="w-4 h-4" />
+                      URL
+                    </button>
+                  </div>
+
+                  {/* Upload Mode */}
+                  {imagePromptMode === 'upload' && (
+                    <>
+                      {imagePromptPreview ? (
+                        <div className="relative inline-block">
+                          <img
+                            src={imagePromptPreview}
+                            alt="Reference"
+                            className="h-24 w-auto rounded-lg border border-slate-300 object-cover"
+                          />
+                          <button
+                            type="button"
+                            onClick={clearImagePrompt}
+                            className="absolute -top-2 -right-2 p-1 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-md transition-colors"
+                            title="Remove image"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                          <p className="text-xs text-slate-500 mt-1">{imagePromptFile?.name}</p>
+                        </div>
+                      ) : (
+                        <div
+                          {...imagePromptDropzone.getRootProps()}
+                          className={`border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-all ${
+                            imagePromptDropzone.isDragActive
+                              ? 'border-emerald-400 bg-emerald-50'
+                              : 'border-slate-300 hover:border-emerald-400 hover:bg-slate-50'
+                          }`}
+                        >
+                          <input {...imagePromptDropzone.getInputProps()} />
+                          <Upload className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+                          <p className="text-sm text-slate-600">
+                            {imagePromptDropzone.isDragActive
+                              ? 'Drop image here...'
+                              : 'Drag & drop or click to upload'}
+                          </p>
+                          <p className="text-xs text-slate-400 mt-1">JPG, PNG, GIF, WebP</p>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {/* URL Mode */}
+                  {imagePromptMode === 'url' && (
+                    <input
+                      type="url"
+                      value={imagePromptUrl}
+                      onChange={(e) => {
+                        setImagePromptUrl(e.target.value);
+                        // Clear file if URL is entered
+                        if (e.target.value && imagePromptFile) {
+                          clearImagePrompt();
+                        }
+                      }}
+                      placeholder="https://example.com/reference-image.jpg"
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-accent-500 focus:border-accent-500"
+                    />
+                  )}
+
+                  <p className="text-xs text-slate-500 mt-2">
+                    Provide an image to guide the generation towards its composition
                   </p>
                 </div>
               </div>
@@ -805,7 +932,7 @@ export default function GenerateTab() {
                 {selectedModel === 'seedream' && ` ${size} • Guidance: ${guidanceScale}`}
                 {selectedModel === 'flux-schnell' && ` ${megapixels}MP • Steps: ${numInferenceSteps} • ${outputFormat.toUpperCase()}`}
                 {selectedModel === 'flux-1.1-pro' && ` Safety: ${safetyTolerance} • ${outputFormat.toUpperCase()} • ${promptUpsampling ? 'Upsampling ON' : 'Upsampling OFF'}`}
-                {selectedModel === 'flux-1.1-pro' && imagePromptUrl.trim() && ' • Redux: ON'}
+                {selectedModel === 'flux-1.1-pro' && (imagePromptFile || imagePromptUrl.trim()) && ' • Redux: ON'}
                 {' '}• Seed: {useRandomSeed ? 'Random' : 'Fixed'}
               </div>
             </div>
