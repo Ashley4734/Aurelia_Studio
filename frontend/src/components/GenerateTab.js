@@ -12,7 +12,7 @@ export default function GenerateTab() {
   const [generationProgress, setGenerationProgress] = useState(0);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [artworkType, setArtworkType] = useState('tv'); // 'tv' or 'wall'
-  const [selectedModel, setSelectedModel] = useState('seedream'); // 'seedream', 'flux-schnell', or 'flux-1.1-pro'
+  const [selectedModel, setSelectedModel] = useState('seedream'); // 'seedream', 'flux-schnell', 'flux-1.1-pro', or 'stable-diffusion'
   const [regeneratingIndex, setRegeneratingIndex] = useState(null); // Track which image is being regenerated
 
   // SeedreamS-3 Parameters
@@ -38,6 +38,17 @@ export default function GenerateTab() {
   const [imagePromptFile, setImagePromptFile] = useState(null);
   const [imagePromptPreview, setImagePromptPreview] = useState(null);
   const [imagePromptMode, setImagePromptMode] = useState('upload'); // 'upload' or 'url'
+
+  // Stable Diffusion Parameters
+  const [sdWidth, setSdWidth] = useState(1024);
+  const [sdHeight, setSdHeight] = useState(1024);
+  const [sdNumOutputs, setSdNumOutputs] = useState(1);
+  const [sdDisableNsfwChecker, setSdDisableNsfwChecker] = useState(false);
+  const [sdRemoveBackground, setSdRemoveBackground] = useState(false);
+  const [sdThreshold, setSdThreshold] = useState(80);
+  const [sdStrayRemoval, setSdStrayRemoval] = useState(0.01);
+  const [sdTrimBackground, setSdTrimBackground] = useState(false);
+  const [sdPadding, setSdPadding] = useState(0);
 
   // Convert file to base64 data URI
   const fileToBase64 = useCallback((file) => {
@@ -152,6 +163,27 @@ export default function GenerateTab() {
             if (useRandomSeed) {
               requestBody.seed = Math.floor(Math.random() * 1000000);
             }
+          } else if (selectedModel === 'stable-diffusion') {
+            requestBody.width = sdWidth;
+            requestBody.height = sdHeight;
+            requestBody.num_outputs = sdNumOutputs;
+            requestBody.disable_nsfw_checker = sdDisableNsfwChecker;
+            requestBody.remove_background = sdRemoveBackground;
+            // Background removal options
+            if (sdRemoveBackground) {
+              requestBody.threshold = sdThreshold;
+              requestBody.stray_removal = sdStrayRemoval;
+              requestBody.trim_background = sdTrimBackground;
+              if (sdTrimBackground) {
+                requestBody.padding = sdPadding;
+              }
+            }
+            // Handle seed parameter
+            if (useRandomSeed) {
+              requestBody.seed = Math.floor(Math.random() * 1000000);
+            } else {
+              requestBody.seed = -1; // Stable Diffusion uses -1 for random
+            }
           }
 
           console.log('📋 Request body:', requestBody);
@@ -197,7 +229,7 @@ export default function GenerateTab() {
       setResults(newResults);
 
       if (newResults.length > 0) {
-        const modelName = selectedModel === 'flux-schnell' ? 'Flux Schnell' : selectedModel === 'flux-1.1-pro' ? 'Flux 1.1 Pro' : 'SeedreamS-3';
+        const modelName = selectedModel === 'flux-schnell' ? 'Flux Schnell' : selectedModel === 'flux-1.1-pro' ? 'Flux 1.1 Pro' : selectedModel === 'stable-diffusion' ? 'Stable Diffusion' : 'SeedreamS-3';
         toast.success(`Generated ${newResults.length} image(s) with ${modelName}!`, {
           icon: '🎨',
           duration: 4000
@@ -406,9 +438,11 @@ export default function GenerateTab() {
                 ? 'bg-blue-100 text-blue-700'
                 : selectedModel === 'flux-1.1-pro'
                 ? 'bg-emerald-100 text-emerald-700'
+                : selectedModel === 'stable-diffusion'
+                ? 'bg-orange-100 text-orange-700'
                 : 'bg-purple-100 text-purple-700'
             }`}>
-              {selectedModel === 'flux-schnell' ? 'Flux Schnell' : selectedModel === 'flux-1.1-pro' ? 'Flux 1.1 Pro' : 'SeedreamS-3'}
+              {selectedModel === 'flux-schnell' ? 'Flux Schnell' : selectedModel === 'flux-1.1-pro' ? 'Flux 1.1 Pro' : selectedModel === 'stable-diffusion' ? 'Stable Diffusion' : 'SeedreamS-3'}
             </span>
           </h3>
           <div className="flex gap-2">
@@ -431,7 +465,7 @@ export default function GenerateTab() {
         {/* Model Selection */}
         <div className="mb-6">
           <label className="block text-sm font-medium text-slate-700 mb-3">AI Model</label>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <motion.button
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
@@ -483,6 +517,24 @@ export default function GenerateTab() {
                   Flux 1.1 Pro
                 </h4>
                 <p className="text-sm text-slate-600">Premium quality with prompt upsampling</p>
+              </div>
+            </motion.button>
+
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setSelectedModel('stable-diffusion')}
+              className={`p-4 rounded-xl border-2 transition-all ${
+                selectedModel === 'stable-diffusion'
+                  ? 'border-orange-500 bg-orange-50'
+                  : 'border-slate-200 bg-white hover:border-orange-300'
+              }`}
+            >
+              <div className="text-left">
+                <h4 className={`font-semibold mb-1 ${selectedModel === 'stable-diffusion' ? 'text-orange-700' : 'text-slate-700'}`}>
+                  Stable Diffusion
+                </h4>
+                <p className="text-sm text-slate-600">Classic SD with background removal options</p>
               </div>
             </motion.button>
           </div>
@@ -912,6 +964,163 @@ export default function GenerateTab() {
               </div>
             )}
 
+            {selectedModel === 'stable-diffusion' && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-600 mb-2">
+                    Width: {sdWidth}px
+                  </label>
+                  <input
+                    type="range"
+                    min="512"
+                    max="1536"
+                    step="64"
+                    value={sdWidth}
+                    onChange={(e) => setSdWidth(parseInt(e.target.value))}
+                    className="w-full"
+                  />
+                  <div className="flex justify-between text-xs text-slate-500 mt-1">
+                    <span>512</span>
+                    <span>1536</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-600 mb-2">
+                    Height: {sdHeight}px
+                  </label>
+                  <input
+                    type="range"
+                    min="512"
+                    max="1536"
+                    step="64"
+                    value={sdHeight}
+                    onChange={(e) => setSdHeight(parseInt(e.target.value))}
+                    className="w-full"
+                  />
+                  <div className="flex justify-between text-xs text-slate-500 mt-1">
+                    <span>512</span>
+                    <span>1536</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-600 mb-2">
+                    Number of Outputs: {sdNumOutputs}
+                  </label>
+                  <input
+                    type="range"
+                    min="1"
+                    max="4"
+                    step="1"
+                    value={sdNumOutputs}
+                    onChange={(e) => setSdNumOutputs(parseInt(e.target.value))}
+                    className="w-full"
+                  />
+                  <div className="flex justify-between text-xs text-slate-500 mt-1">
+                    <span>1</span>
+                    <span>4</span>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2 justify-center">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={sdDisableNsfwChecker}
+                      onChange={(e) => setSdDisableNsfwChecker(e.target.checked)}
+                      className="rounded"
+                    />
+                    <span className="text-sm text-slate-600">Disable safety checker</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={sdRemoveBackground}
+                      onChange={(e) => setSdRemoveBackground(e.target.checked)}
+                      className="rounded"
+                    />
+                    <span className="text-sm text-slate-600">Remove background</span>
+                  </label>
+                </div>
+
+                {sdRemoveBackground && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-600 mb-2">
+                        Transparency Threshold: {sdThreshold}
+                      </label>
+                      <input
+                        type="range"
+                        min="0"
+                        max="255"
+                        step="5"
+                        value={sdThreshold}
+                        onChange={(e) => setSdThreshold(parseInt(e.target.value))}
+                        className="w-full"
+                      />
+                      <div className="flex justify-between text-xs text-slate-500 mt-1">
+                        <span>Less transparent</span>
+                        <span>More transparent</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-slate-600 mb-2">
+                        Stray Removal: {(sdStrayRemoval * 100).toFixed(1)}%
+                      </label>
+                      <input
+                        type="range"
+                        min="0.001"
+                        max="0.3"
+                        step="0.01"
+                        value={sdStrayRemoval}
+                        onChange={(e) => setSdStrayRemoval(parseFloat(e.target.value))}
+                        className="w-full"
+                      />
+                      <div className="flex justify-between text-xs text-slate-500 mt-1">
+                        <span>Keep more</span>
+                        <span>Remove more</span>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {selectedModel === 'stable-diffusion' && sdRemoveBackground && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                <div className="flex items-center">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={sdTrimBackground}
+                      onChange={(e) => setSdTrimBackground(e.target.checked)}
+                      className="rounded"
+                    />
+                    <span className="text-sm text-slate-600">Trim transparent background</span>
+                  </label>
+                </div>
+
+                {sdTrimBackground && (
+                  <div>
+                    <label className="block text-sm font-medium text-slate-600 mb-2">
+                      Padding: {sdPadding}px
+                    </label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      step="5"
+                      value={sdPadding}
+                      onChange={(e) => setSdPadding(parseInt(e.target.value))}
+                      className="w-full"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="mt-4">
               <label className="flex items-center gap-2">
                 <input
@@ -927,12 +1136,13 @@ export default function GenerateTab() {
             {/* Current Settings Display */}
             <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
               <div className="text-sm text-blue-700">
-                <strong>Current Settings:</strong> {aspectRatio}
+                <strong>Current Settings:</strong> {selectedModel !== 'stable-diffusion' ? aspectRatio : `${sdWidth}×${sdHeight}px`}
                 {selectedModel === 'flux-1.1-pro' && aspectRatio === 'custom' && ` (${fluxWidth}×${fluxHeight}px)`} •
                 {selectedModel === 'seedream' && ` ${size} • Guidance: ${guidanceScale}`}
                 {selectedModel === 'flux-schnell' && ` ${megapixels}MP • Steps: ${numInferenceSteps} • ${outputFormat.toUpperCase()}`}
                 {selectedModel === 'flux-1.1-pro' && ` Safety: ${safetyTolerance} • ${outputFormat.toUpperCase()} • ${promptUpsampling ? 'Upsampling ON' : 'Upsampling OFF'}`}
                 {selectedModel === 'flux-1.1-pro' && (imagePromptFile || imagePromptUrl.trim()) && ' • Redux: ON'}
+                {selectedModel === 'stable-diffusion' && ` Outputs: ${sdNumOutputs} • ${sdRemoveBackground ? 'BG Remove: ON' : 'BG Remove: OFF'}`}
                 {' '}• Seed: {useRandomSeed ? 'Random' : 'Fixed'}
               </div>
             </div>
@@ -954,7 +1164,7 @@ cyberpunk city at night"
             className="w-full px-4 py-4 bg-white/70 border border-white/50 rounded-xl focus:outline-none focus:ring-2 focus:ring-accent-500 resize-none font-mono text-sm"
           />
           <p className="text-xs text-slate-500 mt-2">
-            Each line will generate one image. Be descriptive for better results with {selectedModel === 'flux-schnell' ? 'Flux Schnell' : selectedModel === 'flux-1.1-pro' ? 'Flux 1.1 Pro' : 'SeedreamS-3'}.
+            Each line will generate one image. Be descriptive for better results with {selectedModel === 'flux-schnell' ? 'Flux Schnell' : selectedModel === 'flux-1.1-pro' ? 'Flux 1.1 Pro' : selectedModel === 'stable-diffusion' ? 'Stable Diffusion' : 'SeedreamS-3'}.
           </p>
         </div>
 
@@ -964,7 +1174,7 @@ cyberpunk city at night"
             <div className="flex items-center gap-2 mb-2">
               <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
               <span className="text-sm font-medium text-blue-700">
-                Generating with {selectedModel === 'flux-schnell' ? 'Flux Schnell' : selectedModel === 'flux-1.1-pro' ? 'Flux 1.1 Pro' : 'SeedreamS-3'}...
+                Generating with {selectedModel === 'flux-schnell' ? 'Flux Schnell' : selectedModel === 'flux-1.1-pro' ? 'Flux 1.1 Pro' : selectedModel === 'stable-diffusion' ? 'Stable Diffusion' : 'SeedreamS-3'}...
               </span>
             </div>
             {currentPrompt && (
@@ -994,7 +1204,7 @@ cyberpunk city at night"
           ) : (
             <>
               <Zap className="w-5 h-5" />
-              Generate with {selectedModel === 'flux-schnell' ? 'Flux Schnell' : selectedModel === 'flux-1.1-pro' ? 'Flux 1.1 Pro' : 'SeedreamS-3'}
+              Generate with {selectedModel === 'flux-schnell' ? 'Flux Schnell' : selectedModel === 'flux-1.1-pro' ? 'Flux 1.1 Pro' : selectedModel === 'stable-diffusion' ? 'Stable Diffusion' : 'SeedreamS-3'}
             </>
           )}
         </motion.button>
@@ -1096,15 +1306,18 @@ cyberpunk city at night"
                           ? 'bg-blue-50 text-blue-600'
                           : result.model === 'flux-1.1-pro'
                           ? 'bg-emerald-50 text-emerald-600'
+                          : result.model === 'stable-diffusion'
+                          ? 'bg-orange-50 text-orange-600'
                           : 'bg-purple-50 text-purple-600'
                       }`}>
-                        {result.model === 'flux-schnell' ? 'Flux Schnell' : result.model === 'flux-1.1-pro' ? 'Flux 1.1 Pro' : 'SeedreamS-3'}
+                        {result.model === 'flux-schnell' ? 'Flux Schnell' : result.model === 'flux-1.1-pro' ? 'Flux 1.1 Pro' : result.model === 'stable-diffusion' ? 'Stable Diffusion' : 'SeedreamS-3'}
                       </span>
                       <span className="text-slate-400">
-                        {result.parameters?.aspect_ratio}
+                        {result.model === 'stable-diffusion' ? `${result.parameters?.width}×${result.parameters?.height}px` : result.parameters?.aspect_ratio}
                         {result.model === 'flux-1.1-pro' && result.parameters?.aspect_ratio === 'custom' && result.parameters?.width && ` (${result.parameters.width}×${result.parameters.height})`}
                         {result.model === 'seedream' && result.parameters?.size && ` • ${result.parameters.size}`}
                         {result.model === 'flux-schnell' && result.parameters?.megapixels && ` • ${result.parameters.megapixels}MP`}
+                        {result.model === 'stable-diffusion' && result.parameters?.num_outputs > 1 && ` • ${result.parameters.num_outputs} outputs`}
                       </span>
                       {result.model === 'seedream' && result.parameters?.guidance_scale && (
                         <span className="text-slate-400">
@@ -1124,6 +1337,11 @@ cyberpunk city at night"
                       {result.model === 'flux-1.1-pro' && result.parameters?.image_prompt && (
                         <span className="text-slate-400">
                           Redux: ON
+                        </span>
+                      )}
+                      {result.model === 'stable-diffusion' && result.parameters?.remove_background && (
+                        <span className="text-slate-400">
+                          BG Remove: ON
                         </span>
                       )}
                       {result.parameters?.seed && (
@@ -1160,12 +1378,13 @@ cyberpunk city at night"
           <div className="mt-2 p-3 bg-slate-100 rounded-lg text-xs text-slate-600 max-w-md">
             <p>Check browser console (F12) for detailed logs</p>
             <p>API endpoint: /api/generate</p>
-            <p>Model: {selectedModel === 'flux-schnell' ? 'black-forest-labs/flux-schnell' : selectedModel === 'flux-1.1-pro' ? 'black-forest-labs/flux-1.1-pro' : 'bytedance/seedream-3'}</p>
-            <p>Current settings: {aspectRatio}
+            <p>Model: {selectedModel === 'flux-schnell' ? 'black-forest-labs/flux-schnell' : selectedModel === 'flux-1.1-pro' ? 'black-forest-labs/flux-1.1-pro' : selectedModel === 'stable-diffusion' ? 'zedge/stable-diffusion' : 'bytedance/seedream-3'}</p>
+            <p>Current settings: {selectedModel === 'stable-diffusion' ? `${sdWidth}×${sdHeight}` : aspectRatio}
               {selectedModel === 'flux-1.1-pro' && aspectRatio === 'custom' ? ` (${fluxWidth}×${fluxHeight})` : ''} •
               {selectedModel === 'seedream' && ` ${size} • Guidance: ${guidanceScale}`}
               {selectedModel === 'flux-schnell' && ` ${megapixels}MP • Steps: ${numInferenceSteps}`}
               {selectedModel === 'flux-1.1-pro' && ` Safety: ${safetyTolerance} • ${promptUpsampling ? 'Upsampling' : 'No upsampling'}`}
+              {selectedModel === 'stable-diffusion' && ` Outputs: ${sdNumOutputs} • ${sdRemoveBackground ? 'BG Remove' : 'No BG Remove'}`}
             </p>
             <p className="mt-2 text-slate-500">💡 Tip: Click download buttons to save images locally</p>
           </div>
