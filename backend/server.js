@@ -1126,6 +1126,14 @@ app.post('/api/generate', async (req, res) => {
       width,
       height,
       image_prompt,
+      // Stable Diffusion parameters
+      num_outputs,
+      disable_nsfw_checker,
+      remove_background,
+      threshold,
+      stray_removal,
+      trim_background,
+      padding,
       // Common parameters
       seed
     } = req.body;
@@ -1136,7 +1144,7 @@ app.post('/api/generate', async (req, res) => {
       return res.status(400).json({ error: 'Prompt required' });
     }
 
-    const modelName = model === 'flux-schnell' ? 'Flux Schnell' : model === 'flux-1.1-pro' ? 'Flux 1.1 Pro' : 'SeedreamS-3';
+    const modelName = model === 'flux-schnell' ? 'Flux Schnell' : model === 'flux-1.1-pro' ? 'Flux 1.1 Pro' : model === 'stable-diffusion' ? 'Stable Diffusion' : 'SeedreamS-3';
     console.log(`🎯 Processing prompt: "${prompt.trim()}"`);
     console.log(`🤖 Selected model: ${modelName}`);
 
@@ -1213,6 +1221,34 @@ app.post('/api/generate', async (req, res) => {
         // Add seed if provided
         if (seed !== undefined && seed !== null) {
           inputParams.seed = seed;
+        }
+      } else if (model === 'stable-diffusion') {
+        // Stable Diffusion parameters
+        replicateModel = "zedge/stable-diffusion:328e5d9bb8ece3bc78d873f6d9c23070c3d656221b24350e034f4a1a4548f275";
+        inputParams = {
+          prompt: prompt.trim(),
+          width: width || 1024,
+          height: height || 1024,
+          num_outputs: num_outputs || 1,
+          disable_nsfw_checker: disable_nsfw_checker || false,
+          remove_background: remove_background || false
+        };
+
+        // Add background removal options if enabled
+        if (remove_background) {
+          inputParams.threshold = threshold !== undefined ? threshold : 80;
+          inputParams.stray_removal = stray_removal !== undefined ? stray_removal : 0.01;
+          inputParams.trim_background = trim_background || false;
+          if (trim_background) {
+            inputParams.padding = padding !== undefined ? padding : 0;
+          }
+        }
+
+        // Add seed if provided (negative for random)
+        if (seed !== undefined && seed !== null) {
+          inputParams.seed = seed;
+        } else {
+          inputParams.seed = -1; // Stable Diffusion uses -1 for random
         }
       } else {
         // SeedreamS-3 parameters
