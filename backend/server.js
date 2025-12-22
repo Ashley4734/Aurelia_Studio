@@ -1288,6 +1288,9 @@ app.post('/api/generate', async (req, res) => {
         imageUrl = output;
       } else if (output && output.output) {
         imageUrl = Array.isArray(output.output) ? output.output[0] : output.output;
+      } else if (output && output.output_paths) {
+        // Handle zedge/stable-diffusion and similar models that return output_paths
+        imageUrl = Array.isArray(output.output_paths) ? output.output_paths[0] : output.output_paths;
       } else {
         throw new Error('Unexpected output format from Replicate');
       }
