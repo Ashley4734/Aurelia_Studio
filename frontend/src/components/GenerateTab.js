@@ -12,7 +12,7 @@ export default function GenerateTab() {
   const [generationProgress, setGenerationProgress] = useState(0);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [artworkType, setArtworkType] = useState('tv'); // 'tv' or 'wall'
-  const [selectedModel, setSelectedModel] = useState('seedream'); // 'seedream', 'flux-schnell', 'flux-1.1-pro', or 'stable-diffusion'
+  const [selectedModel, setSelectedModel] = useState('seedream'); // 'seedream', 'flux-schnell', 'flux-1.1-pro', 'stable-diffusion', or 'openai-image-1.5'
   const [regeneratingIndex, setRegeneratingIndex] = useState(null); // Track which image is being regenerated
 
   // SeedreamS-3 Parameters
@@ -50,6 +50,19 @@ export default function GenerateTab() {
   const [sdTrimBackground, setSdTrimBackground] = useState(false);
   const [sdPadding, setSdPadding] = useState(0);
 
+  // OpenAI Image 1.5 Parameters
+  const [openaiQuality, setOpenaiQuality] = useState('auto');
+  const [openaiBackground, setOpenaiBackground] = useState('auto');
+  const [openaiModeration, setOpenaiModeration] = useState('auto');
+  const [openaiOutputFormat, setOpenaiOutputFormat] = useState('webp');
+  const [openaiInputFidelity, setOpenaiInputFidelity] = useState('low');
+  const [openaiNumberOfImages, setOpenaiNumberOfImages] = useState(1);
+  const [openaiOutputCompression, setOpenaiOutputCompression] = useState(90);
+  const [openaiInputImages, setOpenaiInputImages] = useState([]);
+  const [openaiInputImagePreviews, setOpenaiInputImagePreviews] = useState([]);
+  const [openaiApiKey, setOpenaiApiKey] = useState('');
+  const [openaiUserId, setOpenaiUserId] = useState('');
+
   // Convert file to base64 data URI
   const fileToBase64 = useCallback((file) => {
     return new Promise((resolve, reject) => {
@@ -86,6 +99,39 @@ export default function GenerateTab() {
     accept: { 'image/*': ['.jpg', '.jpeg', '.png', '.gif', '.webp'] },
     multiple: false,
     onDrop: onImageDrop
+  });
+
+  // Handle OpenAI input images drop
+  const onOpenaiImageDrop = useCallback((acceptedFiles) => {
+    const newFiles = acceptedFiles.slice(0, 5 - openaiInputImages.length); // Max 5 images
+    setOpenaiInputImages(prev => [...prev, ...newFiles]);
+    const newPreviews = newFiles.map(file => URL.createObjectURL(file));
+    setOpenaiInputImagePreviews(prev => [...prev, ...newPreviews]);
+    if (newFiles.length > 0) {
+      toast.success(`Added ${newFiles.length} input image(s)`);
+    }
+  }, [openaiInputImages.length]);
+
+  // Clear OpenAI input images
+  const clearOpenaiInputImages = useCallback(() => {
+    openaiInputImagePreviews.forEach(url => URL.revokeObjectURL(url));
+    setOpenaiInputImages([]);
+    setOpenaiInputImagePreviews([]);
+  }, [openaiInputImagePreviews]);
+
+  // Remove single OpenAI input image
+  const removeOpenaiInputImage = useCallback((index) => {
+    URL.revokeObjectURL(openaiInputImagePreviews[index]);
+    setOpenaiInputImages(prev => prev.filter((_, i) => i !== index));
+    setOpenaiInputImagePreviews(prev => prev.filter((_, i) => i !== index));
+  }, [openaiInputImagePreviews]);
+
+  // Dropzone for OpenAI input images
+  const openaiImageDropzone = useDropzone({
+    accept: { 'image/*': ['.jpg', '.jpeg', '.png', '.gif', '.webp'] },
+    multiple: true,
+    maxFiles: 5,
+    onDrop: onOpenaiImageDrop
   });
 
   const generateImages = async () => {
@@ -184,6 +230,29 @@ export default function GenerateTab() {
             } else {
               requestBody.seed = -1; // Stable Diffusion uses -1 for random
             }
+          } else if (selectedModel === 'openai-image-1.5') {
+            requestBody.quality = openaiQuality;
+            requestBody.background = openaiBackground;
+            requestBody.moderation = openaiModeration;
+            requestBody.output_format = openaiOutputFormat;
+            requestBody.input_fidelity = openaiInputFidelity;
+            requestBody.number_of_images = openaiNumberOfImages;
+            requestBody.output_compression = openaiOutputCompression;
+            // Add API key if provided
+            if (openaiApiKey.trim()) {
+              requestBody.openai_api_key = openaiApiKey.trim();
+            }
+            // Add user ID if provided
+            if (openaiUserId.trim()) {
+              requestBody.user_id = openaiUserId.trim();
+            }
+            // Add input images if provided
+            if (openaiInputImages.length > 0) {
+              const base64Images = await Promise.all(
+                openaiInputImages.map(file => fileToBase64(file))
+              );
+              requestBody.input_images = base64Images;
+            }
           }
 
           console.log('📋 Request body:', requestBody);
@@ -229,7 +298,7 @@ export default function GenerateTab() {
       setResults(newResults);
 
       if (newResults.length > 0) {
-        const modelName = selectedModel === 'flux-schnell' ? 'Flux Schnell' : selectedModel === 'flux-1.1-pro' ? 'Flux 1.1 Pro' : selectedModel === 'stable-diffusion' ? 'Stable Diffusion' : 'SeedreamS-3';
+        const modelName = selectedModel === 'flux-schnell' ? 'Flux Schnell' : selectedModel === 'flux-1.1-pro' ? 'Flux 1.1 Pro' : selectedModel === 'stable-diffusion' ? 'Stable Diffusion' : selectedModel === 'openai-image-1.5' ? 'OpenAI Image 1.5' : 'SeedreamS-3';
         toast.success(`Generated ${newResults.length} image(s) with ${modelName}!`, {
           icon: '🎨',
           duration: 4000
@@ -440,9 +509,11 @@ export default function GenerateTab() {
                 ? 'bg-emerald-100 text-emerald-700'
                 : selectedModel === 'stable-diffusion'
                 ? 'bg-orange-100 text-orange-700'
+                : selectedModel === 'openai-image-1.5'
+                ? 'bg-cyan-100 text-cyan-700'
                 : 'bg-purple-100 text-purple-700'
             }`}>
-              {selectedModel === 'flux-schnell' ? 'Flux Schnell' : selectedModel === 'flux-1.1-pro' ? 'Flux 1.1 Pro' : selectedModel === 'stable-diffusion' ? 'Stable Diffusion' : 'SeedreamS-3'}
+              {selectedModel === 'flux-schnell' ? 'Flux Schnell' : selectedModel === 'flux-1.1-pro' ? 'Flux 1.1 Pro' : selectedModel === 'stable-diffusion' ? 'Stable Diffusion' : selectedModel === 'openai-image-1.5' ? 'OpenAI Image 1.5' : 'SeedreamS-3'}
             </span>
           </h3>
           <div className="flex gap-2">
@@ -465,7 +536,7 @@ export default function GenerateTab() {
         {/* Model Selection */}
         <div className="mb-6">
           <label className="block text-sm font-medium text-slate-700 mb-3">AI Model</label>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
             <motion.button
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
@@ -535,6 +606,24 @@ export default function GenerateTab() {
                   Stable Diffusion
                 </h4>
                 <p className="text-sm text-slate-600">Classic SD with background removal options</p>
+              </div>
+            </motion.button>
+
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setSelectedModel('openai-image-1.5')}
+              className={`p-4 rounded-xl border-2 transition-all ${
+                selectedModel === 'openai-image-1.5'
+                  ? 'border-cyan-500 bg-cyan-50'
+                  : 'border-slate-200 bg-white hover:border-cyan-300'
+              }`}
+            >
+              <div className="text-left">
+                <h4 className={`font-semibold mb-1 ${selectedModel === 'openai-image-1.5' ? 'text-cyan-700' : 'text-slate-700'}`}>
+                  OpenAI Image 1.5
+                </h4>
+                <p className="text-sm text-slate-600">Latest OpenAI image generation with quality control</p>
               </div>
             </motion.button>
           </div>
@@ -1121,6 +1210,191 @@ export default function GenerateTab() {
               </div>
             )}
 
+            {selectedModel === 'openai-image-1.5' && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-600 mb-2">Quality</label>
+                  <select
+                    value={openaiQuality}
+                    onChange={(e) => setOpenaiQuality(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-accent-500 focus:border-accent-500"
+                  >
+                    <option value="auto">Auto</option>
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-600 mb-2">Background</label>
+                  <select
+                    value={openaiBackground}
+                    onChange={(e) => setOpenaiBackground(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-accent-500 focus:border-accent-500"
+                  >
+                    <option value="auto">Auto</option>
+                    <option value="transparent">Transparent</option>
+                    <option value="opaque">Opaque</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-600 mb-2">Moderation</label>
+                  <select
+                    value={openaiModeration}
+                    onChange={(e) => setOpenaiModeration(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-accent-500 focus:border-accent-500"
+                  >
+                    <option value="auto">Auto</option>
+                    <option value="low">Low</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-600 mb-2">Output Format</label>
+                  <select
+                    value={openaiOutputFormat}
+                    onChange={(e) => setOpenaiOutputFormat(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-accent-500 focus:border-accent-500"
+                  >
+                    <option value="webp">WebP</option>
+                    <option value="png">PNG</option>
+                    <option value="jpeg">JPEG</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-600 mb-2">Input Fidelity</label>
+                  <select
+                    value={openaiInputFidelity}
+                    onChange={(e) => setOpenaiInputFidelity(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-accent-500 focus:border-accent-500"
+                  >
+                    <option value="low">Low</option>
+                    <option value="high">High</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-600 mb-2">
+                    Number of Images: {openaiNumberOfImages}
+                  </label>
+                  <input
+                    type="range"
+                    min="1"
+                    max="10"
+                    step="1"
+                    value={openaiNumberOfImages}
+                    onChange={(e) => setOpenaiNumberOfImages(parseInt(e.target.value))}
+                    className="w-full"
+                  />
+                  <div className="flex justify-between text-xs text-slate-500 mt-1">
+                    <span>1</span>
+                    <span>10</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-600 mb-2">
+                    Output Compression: {openaiOutputCompression}%
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="5"
+                    value={openaiOutputCompression}
+                    onChange={(e) => setOpenaiOutputCompression(parseInt(e.target.value))}
+                    className="w-full"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-slate-600 mb-2">
+                    OpenAI API Key <span className="text-xs text-slate-400">(Optional - uses proxy if not provided)</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={openaiApiKey}
+                    onChange={(e) => setOpenaiApiKey(e.target.value)}
+                    placeholder="sk-..."
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-accent-500 focus:border-accent-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-600 mb-2">
+                    User ID <span className="text-xs text-slate-400">(Optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={openaiUserId}
+                    onChange={(e) => setOpenaiUserId(e.target.value)}
+                    placeholder="user-123"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-accent-500 focus:border-accent-500"
+                  />
+                </div>
+
+                <div className="md:col-span-3">
+                  <label className="block text-sm font-medium text-slate-600 mb-2">
+                    Input Images <span className="text-xs text-slate-400">(Optional - up to 5 reference images)</span>
+                  </label>
+
+                  {openaiInputImagePreviews.length > 0 ? (
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap gap-2">
+                        {openaiInputImagePreviews.map((preview, idx) => (
+                          <div key={idx} className="relative inline-block">
+                            <img
+                              src={preview}
+                              alt={`Input ${idx + 1}`}
+                              className="h-20 w-20 rounded-lg border border-slate-300 object-cover"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => removeOpenaiInputImage(idx)}
+                              className="absolute -top-2 -right-2 p-1 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-md transition-colors"
+                              title="Remove image"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                      {openaiInputImages.length < 5 && (
+                        <button
+                          type="button"
+                          onClick={() => openaiImageDropzone.open()}
+                          className="text-sm text-cyan-600 hover:text-cyan-700"
+                        >
+                          + Add more images ({openaiInputImages.length}/5)
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <div
+                      {...openaiImageDropzone.getRootProps()}
+                      className={`border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-all ${
+                        openaiImageDropzone.isDragActive
+                          ? 'border-cyan-400 bg-cyan-50'
+                          : 'border-slate-300 hover:border-cyan-400 hover:bg-slate-50'
+                      }`}
+                    >
+                      <input {...openaiImageDropzone.getInputProps()} />
+                      <Upload className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+                      <p className="text-sm text-slate-600">
+                        {openaiImageDropzone.isDragActive
+                          ? 'Drop images here...'
+                          : 'Drag & drop or click to upload (up to 5 images)'}
+                      </p>
+                      <p className="text-xs text-slate-400 mt-1">JPG, PNG, GIF, WebP</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div className="mt-4">
               <label className="flex items-center gap-2">
                 <input
@@ -1136,14 +1410,15 @@ export default function GenerateTab() {
             {/* Current Settings Display */}
             <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
               <div className="text-sm text-blue-700">
-                <strong>Current Settings:</strong> {selectedModel !== 'stable-diffusion' ? aspectRatio : `${sdWidth}×${sdHeight}px`}
+                <strong>Current Settings:</strong> {selectedModel !== 'stable-diffusion' && selectedModel !== 'openai-image-1.5' ? aspectRatio : selectedModel === 'stable-diffusion' ? `${sdWidth}×${sdHeight}px` : aspectRatio}
                 {selectedModel === 'flux-1.1-pro' && aspectRatio === 'custom' && ` (${fluxWidth}×${fluxHeight}px)`} •
                 {selectedModel === 'seedream' && ` ${size} • Guidance: ${guidanceScale}`}
                 {selectedModel === 'flux-schnell' && ` ${megapixels}MP • Steps: ${numInferenceSteps} • ${outputFormat.toUpperCase()}`}
                 {selectedModel === 'flux-1.1-pro' && ` Safety: ${safetyTolerance} • ${outputFormat.toUpperCase()} • ${promptUpsampling ? 'Upsampling ON' : 'Upsampling OFF'}`}
                 {selectedModel === 'flux-1.1-pro' && (imagePromptFile || imagePromptUrl.trim()) && ' • Redux: ON'}
                 {selectedModel === 'stable-diffusion' && ` Outputs: ${sdNumOutputs} • ${sdRemoveBackground ? 'BG Remove: ON' : 'BG Remove: OFF'}`}
-                {' '}• Seed: {useRandomSeed ? 'Random' : 'Fixed'}
+                {selectedModel === 'openai-image-1.5' && ` Quality: ${openaiQuality} • BG: ${openaiBackground} • ${openaiOutputFormat.toUpperCase()} • Images: ${openaiNumberOfImages}`}
+                {selectedModel !== 'openai-image-1.5' && ' • Seed: ' + (useRandomSeed ? 'Random' : 'Fixed')}
               </div>
             </div>
           </motion.div>
@@ -1164,7 +1439,7 @@ cyberpunk city at night"
             className="w-full px-4 py-4 bg-white/70 border border-white/50 rounded-xl focus:outline-none focus:ring-2 focus:ring-accent-500 resize-none font-mono text-sm"
           />
           <p className="text-xs text-slate-500 mt-2">
-            Each line will generate one image. Be descriptive for better results with {selectedModel === 'flux-schnell' ? 'Flux Schnell' : selectedModel === 'flux-1.1-pro' ? 'Flux 1.1 Pro' : selectedModel === 'stable-diffusion' ? 'Stable Diffusion' : 'SeedreamS-3'}.
+            Each line will generate one image. Be descriptive for better results with {selectedModel === 'flux-schnell' ? 'Flux Schnell' : selectedModel === 'flux-1.1-pro' ? 'Flux 1.1 Pro' : selectedModel === 'stable-diffusion' ? 'Stable Diffusion' : selectedModel === 'openai-image-1.5' ? 'OpenAI Image 1.5' : 'SeedreamS-3'}.
           </p>
         </div>
 
@@ -1174,7 +1449,7 @@ cyberpunk city at night"
             <div className="flex items-center gap-2 mb-2">
               <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
               <span className="text-sm font-medium text-blue-700">
-                Generating with {selectedModel === 'flux-schnell' ? 'Flux Schnell' : selectedModel === 'flux-1.1-pro' ? 'Flux 1.1 Pro' : selectedModel === 'stable-diffusion' ? 'Stable Diffusion' : 'SeedreamS-3'}...
+                Generating with {selectedModel === 'flux-schnell' ? 'Flux Schnell' : selectedModel === 'flux-1.1-pro' ? 'Flux 1.1 Pro' : selectedModel === 'stable-diffusion' ? 'Stable Diffusion' : selectedModel === 'openai-image-1.5' ? 'OpenAI Image 1.5' : 'SeedreamS-3'}...
               </span>
             </div>
             {currentPrompt && (
@@ -1204,7 +1479,7 @@ cyberpunk city at night"
           ) : (
             <>
               <Zap className="w-5 h-5" />
-              Generate with {selectedModel === 'flux-schnell' ? 'Flux Schnell' : selectedModel === 'flux-1.1-pro' ? 'Flux 1.1 Pro' : selectedModel === 'stable-diffusion' ? 'Stable Diffusion' : 'SeedreamS-3'}
+              Generate with {selectedModel === 'flux-schnell' ? 'Flux Schnell' : selectedModel === 'flux-1.1-pro' ? 'Flux 1.1 Pro' : selectedModel === 'stable-diffusion' ? 'Stable Diffusion' : selectedModel === 'openai-image-1.5' ? 'OpenAI Image 1.5' : 'SeedreamS-3'}
             </>
           )}
         </motion.button>
@@ -1308,9 +1583,11 @@ cyberpunk city at night"
                           ? 'bg-emerald-50 text-emerald-600'
                           : result.model === 'stable-diffusion'
                           ? 'bg-orange-50 text-orange-600'
+                          : result.model === 'openai-image-1.5'
+                          ? 'bg-cyan-50 text-cyan-600'
                           : 'bg-purple-50 text-purple-600'
                       }`}>
-                        {result.model === 'flux-schnell' ? 'Flux Schnell' : result.model === 'flux-1.1-pro' ? 'Flux 1.1 Pro' : result.model === 'stable-diffusion' ? 'Stable Diffusion' : 'SeedreamS-3'}
+                        {result.model === 'flux-schnell' ? 'Flux Schnell' : result.model === 'flux-1.1-pro' ? 'Flux 1.1 Pro' : result.model === 'stable-diffusion' ? 'Stable Diffusion' : result.model === 'openai-image-1.5' ? 'OpenAI Image 1.5' : 'SeedreamS-3'}
                       </span>
                       <span className="text-slate-400">
                         {result.model === 'stable-diffusion' ? `${result.parameters?.width}×${result.parameters?.height}px` : result.parameters?.aspect_ratio}
@@ -1378,13 +1655,14 @@ cyberpunk city at night"
           <div className="mt-2 p-3 bg-slate-100 rounded-lg text-xs text-slate-600 max-w-md">
             <p>Check browser console (F12) for detailed logs</p>
             <p>API endpoint: /api/generate</p>
-            <p>Model: {selectedModel === 'flux-schnell' ? 'black-forest-labs/flux-schnell' : selectedModel === 'flux-1.1-pro' ? 'black-forest-labs/flux-1.1-pro' : selectedModel === 'stable-diffusion' ? 'zedge/stable-diffusion' : 'bytedance/seedream-3'}</p>
-            <p>Current settings: {selectedModel === 'stable-diffusion' ? `${sdWidth}×${sdHeight}` : aspectRatio}
+            <p>Model: {selectedModel === 'flux-schnell' ? 'black-forest-labs/flux-schnell' : selectedModel === 'flux-1.1-pro' ? 'black-forest-labs/flux-1.1-pro' : selectedModel === 'stable-diffusion' ? 'zedge/stable-diffusion' : selectedModel === 'openai-image-1.5' ? 'OpenAI Image 1.5' : 'bytedance/seedream-3'}</p>
+            <p>Current settings: {selectedModel === 'stable-diffusion' ? `${sdWidth}×${sdHeight}` : selectedModel === 'openai-image-1.5' ? aspectRatio : aspectRatio}
               {selectedModel === 'flux-1.1-pro' && aspectRatio === 'custom' ? ` (${fluxWidth}×${fluxHeight})` : ''} •
               {selectedModel === 'seedream' && ` ${size} • Guidance: ${guidanceScale}`}
               {selectedModel === 'flux-schnell' && ` ${megapixels}MP • Steps: ${numInferenceSteps}`}
               {selectedModel === 'flux-1.1-pro' && ` Safety: ${safetyTolerance} • ${promptUpsampling ? 'Upsampling' : 'No upsampling'}`}
               {selectedModel === 'stable-diffusion' && ` Outputs: ${sdNumOutputs} • ${sdRemoveBackground ? 'BG Remove' : 'No BG Remove'}`}
+              {selectedModel === 'openai-image-1.5' && ` Quality: ${openaiQuality} • Images: ${openaiNumberOfImages}`}
             </p>
             <p className="mt-2 text-slate-500">💡 Tip: Click download buttons to save images locally</p>
           </div>

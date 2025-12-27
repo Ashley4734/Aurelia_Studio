@@ -9,6 +9,7 @@ import JSZip from 'jszip';
 import { jsPDF } from 'jspdf';
 import axios from 'axios';
 import Replicate from 'replicate';
+import OpenAI from 'openai';
 import { spawn } from 'child_process';
 
 // Try to import sharp (optional dependency for thumbnail generation)
@@ -1134,6 +1135,16 @@ app.post('/api/generate', async (req, res) => {
       stray_removal,
       trim_background,
       padding,
+      // OpenAI Image 1.5 parameters
+      quality,
+      background,
+      moderation,
+      input_fidelity,
+      number_of_images,
+      output_compression,
+      input_images,
+      openai_api_key,
+      user_id,
       // Common parameters
       seed
     } = req.body;
@@ -1144,7 +1155,7 @@ app.post('/api/generate', async (req, res) => {
       return res.status(400).json({ error: 'Prompt required' });
     }
 
-    const modelName = model === 'flux-schnell' ? 'Flux Schnell' : model === 'flux-1.1-pro' ? 'Flux 1.1 Pro' : model === 'stable-diffusion' ? 'Stable Diffusion' : 'SeedreamS-3';
+    const modelName = model === 'flux-schnell' ? 'Flux Schnell' : model === 'flux-1.1-pro' ? 'Flux 1.1 Pro' : model === 'stable-diffusion' ? 'Stable Diffusion' : model === 'openai-image-1.5' ? 'OpenAI Image 1.5' : 'SeedreamS-3';
     console.log(`🎯 Processing prompt: "${prompt.trim()}"`);
     console.log(`🤖 Selected model: ${modelName}`);
 
@@ -1249,6 +1260,105 @@ app.post('/api/generate', async (req, res) => {
           inputParams.seed = seed;
         } else {
           inputParams.seed = -1; // Stable Diffusion uses -1 for random
+        }
+      } else if (model === 'openai-image-1.5') {
+        // OpenAI Image 1.5 parameters - handle differently as it's not Replicate
+        console.log('🎨 Using OpenAI Image 1.5 API');
+
+        // Initialize OpenAI client
+        const openaiClient = new OpenAI({
+          apiKey: openai_api_key || process.env.OPENAI_API_KEY
+        });
+
+        if (!openai_api_key && !process.env.OPENAI_API_KEY) {
+          console.log('❌ OpenAI API key not configured');
+          return res.status(500).json({
+            error: 'OpenAI API key not configured',
+            details: 'Please provide an API key or set OPENAI_API_KEY environment variable'
+          });
+        }
+
+        // Map aspect ratio to size parameter
+        const sizeMap = {
+          '1:1': '1024x1024',
+          '3:2': '1536x1024',
+          '2:3': '1024x1536'
+        };
+
+        // Prepare OpenAI API request
+        const openaiParams = {
+          model: 'dall-e-3',
+          prompt: prompt.trim(),
+          n: Math.min(number_of_images || 1, 1), // DALL-E 3 only supports 1 image at a time
+          size: sizeMap[aspect_ratio] || '1024x1024',
+          quality: quality === 'high' ? 'hd' : 'standard',
+          response_format: 'url'
+        };
+
+        if (user_id) {
+          openaiParams.user = user_id;
+        }
+
+        console.log('📋 OpenAI parameters:', openaiParams);
+        console.log('📡 Calling OpenAI API...');
+
+        try {
+          const openaiResponse = await openaiClient.images.generate(openaiParams);
+
+          console.log('✅ OpenAI API call successful');
+
+          const imageUrl = openaiResponse.data[0].url;
+
+          if (!imageUrl) {
+            throw new Error('No image URL received from OpenAI');
+          }
+
+          console.log('🖼️ Image URL received:', imageUrl);
+
+          const result = {
+            imageUrl: imageUrl,
+            prompt: prompt.trim(),
+            timestamp: new Date().toISOString(),
+            model: model,
+            modelName: modelName,
+            parameters: {
+              prompt: prompt.trim(),
+              aspect_ratio: aspect_ratio,
+              quality: quality,
+              background: background,
+              moderation: moderation,
+              output_format: output_format,
+              input_fidelity: input_fidelity,
+              number_of_images: number_of_images,
+              output_compression: output_compression
+            },
+            success: true
+          };
+
+          console.log('✅ Generation completed successfully');
+          return res.json(result);
+        } catch (openaiError) {
+          console.error('❌ OpenAI API Error:', openaiError);
+
+          let errorMessage = 'OpenAI image generation failed';
+          let errorDetails = openaiError.message;
+
+          if (openaiError.status === 401) {
+            errorMessage = 'Invalid OpenAI API key';
+          } else if (openaiError.status === 429) {
+            errorMessage = 'Rate limit exceeded';
+            errorDetails = 'Too many requests. Please wait and try again.';
+          } else if (openaiError.status === 400) {
+            errorMessage = 'Invalid request';
+            errorDetails = openaiError.message || 'The request was invalid. Check your parameters.';
+          }
+
+          return res.status(openaiError.status || 500).json({
+            error: errorMessage,
+            details: errorDetails,
+            timestamp: new Date().toISOString(),
+            success: false
+          });
         }
       } else {
         // SeedreamS-3 parameters
@@ -1386,7 +1496,7 @@ app.post('/api/generate', async (req, res) => {
     let errorMessage = 'Image generation failed';
     let errorDetails = error.message;
 
-    const modelName = req.body.model === 'flux-schnell' ? 'Flux Schnell' : 'SeedreamS-3';
+    const modelName = req.body.model === 'flux-schnell' ? 'Flux Schnell' : req.body.model === 'flux-1.1-pro' ? 'Flux 1.1 Pro' : req.body.model === 'stable-diffusion' ? 'Stable Diffusion' : req.body.model === 'openai-image-1.5' ? 'OpenAI Image 1.5' : 'SeedreamS-3';
 
     if (error.message?.includes('auth') || error.message?.includes('token')) {
       statusCode = 401;
