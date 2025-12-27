@@ -9,7 +9,6 @@ import JSZip from 'jszip';
 import { jsPDF } from 'jspdf';
 import axios from 'axios';
 import Replicate from 'replicate';
-import OpenAI from 'openai';
 import { spawn } from 'child_process';
 
 // Try to import sharp (optional dependency for thumbnail generation)
@@ -1143,7 +1142,6 @@ app.post('/api/generate', async (req, res) => {
       number_of_images,
       output_compression,
       input_images,
-      openai_api_key,
       user_id,
       // Common parameters
       seed
@@ -1262,105 +1260,19 @@ app.post('/api/generate', async (req, res) => {
           inputParams.seed = -1; // Stable Diffusion uses -1 for random
         }
       } else if (model === 'openai-image-1.5') {
-        // OpenAI Image 1.5 parameters - handle differently as it's not Replicate
-        console.log('🎨 Using OpenAI Image 1.5 API');
-
-        // Check API key before initializing client
-        const apiKey = openai_api_key || process.env.OPENAI_API_KEY;
-        if (!apiKey) {
-          console.log('❌ OpenAI API key not configured');
-          return res.status(500).json({
-            error: 'OpenAI API key not configured',
-            details: 'Please provide an API key or set OPENAI_API_KEY environment variable'
-          });
-        }
-
-        // Initialize OpenAI client
-        const openaiClient = new OpenAI({
-          apiKey: apiKey
-        });
-
-        // Map aspect ratio to size parameter
-        const sizeMap = {
-          '1:1': '1024x1024',
-          '3:2': '1536x1024',
-          '2:3': '1024x1536'
-        };
-
-        // Prepare OpenAI API request
-        const openaiParams = {
-          model: 'dall-e-3',
+        // DALL-E 3 via Replicate
+        replicateModel = "openai/dall-e-3";
+        inputParams = {
           prompt: prompt.trim(),
-          n: Math.min(number_of_images || 1, 1), // DALL-E 3 only supports 1 image at a time
-          size: sizeMap[aspect_ratio] || '1024x1024',
-          quality: quality === 'high' ? 'hd' : 'standard',
-          response_format: 'url'
+          aspect_ratio: aspect_ratio || '1:1',
+          n: 1 // DALL-E 3 only supports 1 image at a time
         };
 
-        if (user_id) {
-          openaiParams.user = user_id;
-        }
-
-        console.log('📋 OpenAI parameters:', openaiParams);
-        console.log('📡 Calling OpenAI API...');
-
-        try {
-          const openaiResponse = await openaiClient.images.generate(openaiParams);
-
-          console.log('✅ OpenAI API call successful');
-
-          const imageUrl = openaiResponse.data[0].url;
-
-          if (!imageUrl) {
-            throw new Error('No image URL received from OpenAI');
-          }
-
-          console.log('🖼️ Image URL received:', imageUrl);
-
-          const result = {
-            imageUrl: imageUrl,
-            prompt: prompt.trim(),
-            timestamp: new Date().toISOString(),
-            model: model,
-            modelName: modelName,
-            parameters: {
-              prompt: prompt.trim(),
-              aspect_ratio: aspect_ratio,
-              quality: quality,
-              background: background,
-              moderation: moderation,
-              output_format: output_format,
-              input_fidelity: input_fidelity,
-              number_of_images: number_of_images,
-              output_compression: output_compression
-            },
-            success: true
-          };
-
-          console.log('✅ Generation completed successfully');
-          return res.json(result);
-        } catch (openaiError) {
-          console.error('❌ OpenAI API Error:', openaiError);
-
-          let errorMessage = 'OpenAI image generation failed';
-          let errorDetails = openaiError.message;
-
-          if (openaiError.status === 401) {
-            errorMessage = 'Invalid OpenAI API key';
-          } else if (openaiError.status === 429) {
-            errorMessage = 'Rate limit exceeded';
-            errorDetails = 'Too many requests. Please wait and try again.';
-          } else if (openaiError.status === 400) {
-            errorMessage = 'Invalid request';
-            errorDetails = openaiError.message || 'The request was invalid. Check your parameters.';
-          }
-
-          return res.status(openaiError.status || 500).json({
-            error: errorMessage,
-            details: errorDetails,
-            timestamp: new Date().toISOString(),
-            success: false
-          });
+        // Map quality to style parameter (vivid = high quality, natural = standard)
+        if (quality === 'high') {
+          inputParams.style = 'vivid';
+        } else {
+          inputParams.style = 'natural';
         }
       } else {
         // SeedreamS-3 parameters
@@ -1976,7 +1888,6 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`📊 Environment: ${process.env.NODE_ENV}`);
   console.log(`🔑 Replicate API: ${process.env.REPLICATE_API_TOKEN ? '✓ Configured' : '✗ Missing'}`);
   console.log(`🔑 Anthropic API: ${process.env.ANTHROPIC_API_KEY ? '✓ Configured' : '✗ Missing'}`);
-  console.log(`🔑 OpenAI API: ${process.env.OPENAI_API_KEY ? '✓ Configured' : '✗ Missing'}`);
   console.log(`🐍 Enhanced PSD Processor: ${psdProcessorPath ? '✓ Available' : '✗ Unavailable'}`);
   console.log(`✨ Enhanced Features: Multi-method detection, Working logic integration, Improved placement`);
   console.log(`📁 Data directory: ${DATA_DIR}`);
