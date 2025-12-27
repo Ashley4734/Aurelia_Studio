@@ -1261,18 +1261,11 @@ app.post('/api/generate', async (req, res) => {
           inputParams.seed = -1; // Stable Diffusion uses -1 for random
         }
       } else if (model === 'openai-image-1.5') {
-        // GPT Image 1 via Replicate (supports reference images)
-        replicateModel = "openai/gpt-image-1";
+        // GPT Image 1.5 via Replicate API (supports reference images)
+        replicateModel = "openai/gpt-image-1.5";
 
-        // Check for OpenAI API key (required for this model)
+        // OpenAI API key is optional - Replicate uses proxy if not provided
         const apiKey = openai_api_key || process.env.OPENAI_API_KEY;
-        if (!apiKey) {
-          console.log('❌ OpenAI API key not configured');
-          return res.status(400).json({
-            error: 'OpenAI API key required',
-            details: 'Please provide an OpenAI API key in the settings or set OPENAI_API_KEY environment variable'
-          });
-        }
 
         // Map aspect_ratio to supported values (1:1, 3:2, 2:3)
         let mappedAspectRatio = '1:1';
@@ -1283,7 +1276,6 @@ app.post('/api/generate', async (req, res) => {
         }
 
         inputParams = {
-          openai_api_key: apiKey,
           prompt: prompt.trim(),
           aspect_ratio: mappedAspectRatio,
           quality: quality || 'auto',
@@ -1293,6 +1285,11 @@ app.post('/api/generate', async (req, res) => {
           background: background || 'auto',
           moderation: moderation || 'auto'
         };
+
+        // Add OpenAI API key if provided (optional - uses Replicate proxy if not set)
+        if (apiKey) {
+          inputParams.openai_api_key = apiKey;
+        }
 
         // Add input_fidelity parameter
         if (input_fidelity) {
