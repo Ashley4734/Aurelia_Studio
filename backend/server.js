@@ -1143,6 +1143,7 @@ app.post('/api/generate', async (req, res) => {
       output_compression,
       input_images,
       user_id,
+      openai_api_key,
       // Common parameters
       seed
     } = req.body;
@@ -1260,19 +1261,53 @@ app.post('/api/generate', async (req, res) => {
           inputParams.seed = -1; // Stable Diffusion uses -1 for random
         }
       } else if (model === 'openai-image-1.5') {
-        // DALL-E 3 via Replicate
-        replicateModel = "openai/dall-e-3";
+        // GPT Image 1 via Replicate (supports reference images)
+        replicateModel = "openai/gpt-image-1";
+
+        // Check for OpenAI API key (required for this model)
+        const apiKey = openai_api_key || process.env.OPENAI_API_KEY;
+        if (!apiKey) {
+          console.log('❌ OpenAI API key not configured');
+          return res.status(400).json({
+            error: 'OpenAI API key required',
+            details: 'Please provide an OpenAI API key in the settings or set OPENAI_API_KEY environment variable'
+          });
+        }
+
+        // Map aspect_ratio to supported values (1:1, 3:2, 2:3)
+        let mappedAspectRatio = '1:1';
+        if (aspect_ratio === '3:2' || aspect_ratio === '4:3' || aspect_ratio === '16:9' || aspect_ratio === '21:9') {
+          mappedAspectRatio = '3:2';
+        } else if (aspect_ratio === '2:3' || aspect_ratio === '3:4' || aspect_ratio === '9:16') {
+          mappedAspectRatio = '2:3';
+        }
+
         inputParams = {
+          openai_api_key: apiKey,
           prompt: prompt.trim(),
-          aspect_ratio: aspect_ratio || '1:1',
-          n: 1 // DALL-E 3 only supports 1 image at a time
+          aspect_ratio: mappedAspectRatio,
+          quality: quality || 'auto',
+          number_of_images: Math.min(number_of_images || 1, 10),
+          output_format: output_format || 'webp',
+          output_compression: output_compression || 90,
+          background: background || 'auto',
+          moderation: moderation || 'auto'
         };
 
-        // Map quality to style parameter (vivid = high quality, natural = standard)
-        if (quality === 'high') {
-          inputParams.style = 'vivid';
-        } else {
-          inputParams.style = 'natural';
+        // Add input_fidelity parameter
+        if (input_fidelity) {
+          inputParams.input_fidelity = input_fidelity;
+        }
+
+        // Add user_id if provided
+        if (user_id) {
+          inputParams.user_id = user_id;
+        }
+
+        // Add input images if provided (reference images)
+        if (input_images && Array.isArray(input_images) && input_images.length > 0) {
+          console.log(`📷 Adding ${input_images.length} reference image(s)`);
+          inputParams.input_images = input_images;
         }
       } else {
         // SeedreamS-3 parameters
