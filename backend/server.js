@@ -1265,18 +1265,20 @@ app.post('/api/generate', async (req, res) => {
         // OpenAI Image 1.5 parameters - handle differently as it's not Replicate
         console.log('🎨 Using OpenAI Image 1.5 API');
 
-        // Initialize OpenAI client
-        const openaiClient = new OpenAI({
-          apiKey: openai_api_key || process.env.OPENAI_API_KEY
-        });
-
-        if (!openai_api_key && !process.env.OPENAI_API_KEY) {
+        // Check API key before initializing client
+        const apiKey = openai_api_key || process.env.OPENAI_API_KEY;
+        if (!apiKey) {
           console.log('❌ OpenAI API key not configured');
           return res.status(500).json({
             error: 'OpenAI API key not configured',
             details: 'Please provide an API key or set OPENAI_API_KEY environment variable'
           });
         }
+
+        // Initialize OpenAI client
+        const openaiClient = new OpenAI({
+          apiKey: apiKey
+        });
 
         // Map aspect ratio to size parameter
         const sizeMap = {
@@ -1974,6 +1976,7 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`📊 Environment: ${process.env.NODE_ENV}`);
   console.log(`🔑 Replicate API: ${process.env.REPLICATE_API_TOKEN ? '✓ Configured' : '✗ Missing'}`);
   console.log(`🔑 Anthropic API: ${process.env.ANTHROPIC_API_KEY ? '✓ Configured' : '✗ Missing'}`);
+  console.log(`🔑 OpenAI API: ${process.env.OPENAI_API_KEY ? '✓ Configured' : '✗ Missing'}`);
   console.log(`🐍 Enhanced PSD Processor: ${psdProcessorPath ? '✓ Available' : '✗ Unavailable'}`);
   console.log(`✨ Enhanced Features: Multi-method detection, Working logic integration, Improved placement`);
   console.log(`📁 Data directory: ${DATA_DIR}`);
